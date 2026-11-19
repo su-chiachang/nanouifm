@@ -32,6 +32,7 @@ pub fn view(m: *State, c: *ui.Context) void {
     m.view_state.palette.index.setWaker(c.waker);
     m.vol_signal.waker = c.waker;
     m.preview.thumbs.setWaker(c.waker);
+    m.loader.setWaker(c.waker);
     m.waker = c.waker;
     m.clock = c.time;
     m.text_focus = c.focus_is_text;

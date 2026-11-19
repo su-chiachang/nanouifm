@@ -10,7 +10,8 @@
 //! `.manual` keeps the same bookkeeping without the operating system, so a test fires a change
 //! itself with `fire`, and `.system` is the real thing (main.zig only).
 //!
-//! Reads stay on the main thread: `Listing.loadFolder` is synchronous (see its note).
+//! The reads go through the model's loader when listing is asynchronous (`Config.listing`):
+//! the tab keeps its selection, scroll and rows until the new listing lands (`listing_apply.zig`).
 const std = @import("std");
 const nanoui = @import("nanoui");
 const ui = nanoui.ui;
@@ -124,7 +125,7 @@ pub const Watchers = struct {
             for (s.dirty.items) |d| self.gpa.free(d);
             s.dirty.clearRetainingCapacity();
         }
-        try refresh.folders(m, s.dirty.items);
+        try refresh.foldersLater(m, s.dirty.items);
         return true;
     }
 
@@ -156,7 +157,10 @@ pub const Watchers = struct {
         if (self.seen_first) {
             for (m.panes.items) |*p| {
                 const tab = p.tab();
-                if (std.mem.indexOfScalar(u32, self.shown.items, tab.id) == null) try tab.reload(p.opts(m.show_hidden));
+                if (std.mem.indexOfScalar(u32, self.shown.items, tab.id) != null) continue;
+                // (A tab whose first listing or navigation is still being read will be fresher than this.)
+                if (!tab.listed or m.loader.has(tab.id, .reload) or m.loader.has(tab.id, .nav)) continue;
+                try tab.reload(m.opts(p));
             }
         }
         self.seen_first = true;

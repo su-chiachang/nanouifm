@@ -173,9 +173,11 @@ const Build = struct {
             const folder = try model_mod.normalize(m.gpa, path);
             defer m.gpa.free(folder);
             if (made) |*p| {
-                _ = try p.addTab(folder, m.nextId(), m.show_hidden, p.tabs.items.len - 1, false);
+                var o = p.opts(m.show_hidden);
+                o.loader = m.loader.ifAsync();
+                _ = try p.addTabWith(folder, m.nextId(), o, p.tabs.items.len - 1, false);
             } else {
-                made = try Pane.init(m.gpa, folder, .{ .show_hidden = m.show_hidden }, .{ .pane = m.nextId(), .tab = m.nextId() });
+                made = try Pane.init(m.gpa, folder, .{ .show_hidden = m.show_hidden, .loader = m.loader.ifAsync() }, .{ .pane = m.nextId(), .tab = m.nextId() });
             }
             if (i <= pp.selected_tab) shown = made.?.tabs.items.len - 1;
         }

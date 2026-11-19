@@ -9,6 +9,7 @@ const Allocator = std.mem.Allocator;
 const lister = @import("../core/lister.zig");
 const FileItem = lister.FileItem;
 const Listing = @import("listing.zig").Listing;
+const Preloaded = @import("listing_inbox.zig").Preloaded;
 
 /// A deeper tree than this is not walked (the set is user-driven, this only bounds a runaway).
 pub const max_depth: u16 = 24;
@@ -19,6 +20,8 @@ pub const Options = struct {
     /// The toolbar's name filter. Only the column view reads it (the list filters its top
     /// level in `Tab`, and never the folders opened in place).
     filter: []const u8 = "",
+    /// Folders a landed request already read (`listing_loader.zig`); null: read them here.
+    pre: ?*Preloaded = null,
 };
 
 const Kids = std.StringHashMapUnmanaged(Listing);
@@ -167,7 +170,7 @@ const Walk = struct {
         } else {
             key = try w.gpa.dupe(u8, path);
             errdefer w.gpa.free(key);
-            l = try Listing.read(w.gpa, path);
+            l = try Listing.readVia(w.gpa, path, w.o.pre);
         }
         errdefer {
             w.gpa.free(key);

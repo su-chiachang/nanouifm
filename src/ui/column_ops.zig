@@ -16,7 +16,7 @@ const typeahead = @import("typeahead.zig");
 const isSameOrInside = @import("expansion.zig").isSameOrInside;
 
 fn options(o: Opts) cm.Options {
-    return .{ .show_hidden = o.show_hidden, .sort = o.sort, .filter = o.filter };
+    return .{ .show_hidden = o.show_hidden, .sort = o.sort, .filter = o.filter, .pre = o.pre };
 }
 
 /// Makes the stack match the tab's folder: nothing to do when its last column already is the
@@ -24,7 +24,36 @@ fn options(o: Opts) cm.Options {
 pub fn sync(gpa: Allocator, tab: *Tab, o: Opts) Allocator.Error!void {
     tab.col.freeRetired(gpa);
     if (tab.col.last()) |l| if (std.mem.eql(u8, l.path, tab.path())) return;
+    if (o.later()) |ld| { // the stack is built when its folders are read; one request is enough
+        if (ld.has(tab.id, .column)) return;
+        var chain = try chainOf(gpa, tab);
+        defer chain.list.deinit(gpa);
+        return ld.request(tab.id, tab.path(), .col_rebuild, chain.list.items);
+    }
     try rebuild(gpa, tab, o);
+}
+
+const Chain = struct {
+    /// The leftmost column's folder (borrowed from the tab or its column state).
+    root: []const u8,
+    /// The folders from the root down to the tab's own (borrowed from the tab's path).
+    list: std.ArrayList([]const u8),
+};
+
+fn chainOf(gpa: Allocator, tab: *const Tab) Allocator.Error!Chain {
+    const here = tab.path();
+    var root = tab.col.root orelse parentOr(here);
+    if (!isSameOrInside(here, root)) root = parentOr(here);
+    var list: std.ArrayList([]const u8) = .empty;
+    errdefer list.deinit(gpa);
+    var cur = here;
+    while (true) {
+        try list.append(gpa, cur);
+        if (std.mem.eql(u8, cur, root)) break;
+        cur = std.fs.path.dirname(cur) orelse break;
+    }
+    std.mem.reverse([]const u8, list.items);
+    return .{ .root = root, .list = list };
 }
 
 fn parentOr(path: []const u8) []const u8 {
@@ -34,7 +63,7 @@ fn parentOr(path: []const u8) []const u8 {
 fn newColumn(gpa: Allocator, path: []const u8, o: Opts) Allocator.Error!Column {
     const copy = try gpa.dupe(u8, path);
     errdefer gpa.free(copy);
-    var listing = try Listing.read(gpa, path);
+    var listing = try Listing.readVia(gpa, path, o.pre);
     errdefer listing.deinit(gpa);
     try listing.rebuild(gpa, o.show_hidden, o.sort, "");
     return .{ .path = copy, .listing = listing };
@@ -44,27 +73,15 @@ fn newColumn(gpa: Allocator, path: []const u8, o: Opts) Allocator.Error!Column {
 /// each column selecting the folder after it; the last has the tab's selection.
 pub fn rebuild(gpa: Allocator, tab: *Tab, o: Opts) Allocator.Error!void {
     const cs = &tab.col;
+    var chain = try chainOf(gpa, tab);
+    defer chain.list.deinit(gpa);
     cs.truncate(gpa, 0);
-    const here = tab.path();
-    var root = cs.root orelse parentOr(here);
-    if (!isSameOrInside(here, root)) root = parentOr(here);
-    try cs.setRoot(gpa, root);
-    root = cs.root.?;
-    // Folders from `here` up to the root, then walked from the root down.
-    var chain: std.ArrayList([]const u8) = .empty;
-    defer chain.deinit(gpa);
-    var cur = here;
-    while (true) {
-        try chain.append(gpa, cur);
-        if (std.mem.eql(u8, cur, root)) break;
-        cur = std.fs.path.dirname(cur) orelse break;
-    }
-    std.mem.reverse([]const u8, chain.items);
-    for (chain.items, 0..) |p, i| {
+    try cs.setRoot(gpa, chain.root);
+    for (chain.list.items, 0..) |p, i| {
         var col = try newColumn(gpa, p, o);
         errdefer col.deinit(gpa);
-        if (i + 1 < chain.items.len) {
-            try col.selection.selectOnly(gpa, chain.items[i + 1]);
+        if (i + 1 < chain.list.items.len) {
+            try col.selection.selectOnly(gpa, chain.list.items[i + 1]);
         } else {
             try col.selection.copyFrom(gpa, &tab.selection);
             try col.selection.prune(gpa, col.listing.visible);
@@ -75,9 +92,28 @@ pub fn rebuild(gpa: Allocator, tab: *Tab, o: Opts) Allocator.Error!void {
     cs.reveal = true;
 }
 
+/// The folders `afterSelection` reads for column `depth`: the one it drills into (when its column
+/// is not there yet) and the one the tab moves to. Borrowed; the loader copies them.
+fn followNeeds(gpa: Allocator, tab: *const Tab, depth: usize, out: *std.ArrayList([]const u8)) Allocator.Error!void {
+    const cols = tab.col.columns.items;
+    var location: []const u8 = cols[depth].path;
+    if (cols[depth].single()) |it| if (it.is_directory) {
+        location = it.path;
+        const next_is_it = depth + 1 < cols.len and std.mem.eql(u8, cols[depth + 1].path, it.path);
+        if (!next_is_it) try out.append(gpa, it.path);
+    };
+    if (!std.mem.eql(u8, location, tab.path())) try out.append(gpa, location);
+}
+
 /// A column's selection changed: the columns after it follow, the tab's folder and selection too.
-fn afterSelection(gpa: Allocator, tab: *Tab, o: Opts, depth: usize) Allocator.Error!void {
+pub fn afterSelection(gpa: Allocator, tab: *Tab, o: Opts, depth: usize) Allocator.Error!void {
     const cs = &tab.col;
+    if (o.later()) |ld| { // the folders it reads are asked for first; the rest runs when they land
+        var need: std.ArrayList([]const u8) = .empty;
+        defer need.deinit(gpa);
+        try followNeeds(gpa, tab, depth, &need);
+        if (need.items.len > 0) return ld.request(tab.id, tab.path(), .{ .col_after = depth }, need.items);
+    }
     var location: []const u8 = cs.columns.items[depth].path;
     var drilled = false;
     if (cs.columns.items[depth].single()) |it| if (it.is_directory) {
@@ -145,11 +181,19 @@ pub fn key(gpa: Allocator, tab: *Tab, o: Opts, k: NavKey, shift: bool) Allocator
             col.selection.clear(gpa);
             cs.truncate(gpa, depth + 1);
             cs.active = depth - 1;
-            try tab.setColumnLocation(cs.columns.items[depth].path, o);
-            try tab.selection.copyFrom(gpa, &cs.last().?.selection);
-            cs.reveal = true;
+            try finishLocation(gpa, tab, o, cs.columns.items[depth].path);
         },
     }
+}
+
+/// The tab's folder follows the column stack's last column to `location`.
+pub fn finishLocation(gpa: Allocator, tab: *Tab, o: Opts, location: []const u8) Allocator.Error!void {
+    if (o.later()) |ld| if (!std.mem.eql(u8, location, tab.path())) {
+        return ld.request(tab.id, tab.path(), .{ .col_loc = location }, &.{location});
+    };
+    try tab.setColumnLocation(location, o);
+    try tab.selection.copyFrom(gpa, &tab.col.last().?.selection);
+    tab.col.reveal = true;
 }
 
 /// Selects the first row of the active column whose name starts with `prefix`.

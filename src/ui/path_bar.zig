@@ -87,8 +87,10 @@ pub fn view(c: *ui.Context, m: *Model, pane: *Pane, w: f32) void {
     ui.spacer(c);
     const n = tab.listing.visible.len;
     const sel = tab.selection.count();
-    const text = if (sel > 0) c.print("{d} of {d} selected", .{ sel, n }) else if (n == 1) "1 item" else c.print("{d} items", .{n});
-    ui.text(c, text, .{ .size = 11.5, .color = th.muted, .tabular = true });
+    // A folder being read (a navigation, a column's, a first listing) says so instead of counting.
+    const loading = m.loader.loading(tab.id, tab.listed);
+    const text = if (loading) "Loading\u{2026}" else if (sel > 0) c.print("{d} of {d} selected", .{ sel, n }) else if (n == 1) "1 item" else c.print("{d} items", .{n});
+    ui.text(c, text, .{ .size = 11.5, .color = if (loading) th.accent else th.muted, .tabular = true });
 }
 
 fn isHome(home: []const u8, path: []const u8) bool {

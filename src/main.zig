@@ -9,6 +9,7 @@ const system_volumes = @import("ui/system_volumes.zig");
 const opener = @import("ui/opener.zig");
 const system_hooks = @import("ui/system_hooks.zig");
 const system_quick_look = @import("ui/system_quick_look.zig");
+const system_listing = @import("ui/system_listing.zig");
 
 pub const panic = nanoui.panic;
 pub const std_options = nanoui.std_options;
@@ -63,6 +64,8 @@ fn run(init: nanoui.Init) !void {
         // Clipboard mirror, Reveal in Finder, Option state; live refresh with real watchers.
         .hooks = system_hooks.hooks,
         .watch = .system,
+        // Folders are read on worker threads: a big or slow one never stalls a frame.
+        .listing = .{ .runner = system_listing.run },
         .index = .{ .roots = &.{ index_roots[0], index_roots[1], index_roots[2] } },
     });
     defer state.deinit();

@@ -117,7 +117,7 @@ pub const ColumnState = struct {
     /// is no longer the selected one of the column before it goes.
     pub fn reread(self: *ColumnState, gpa: Allocator, o: Options) Allocator.Error!void {
         for (self.columns.items, 0..) |*c, i| {
-            var fresh = try Listing.read(gpa, c.path);
+            var fresh = try Listing.readVia(gpa, c.path, o.pre);
             errdefer fresh.deinit(gpa);
             try fresh.rebuild(gpa, o.show_hidden, o.sort, self.filterOf(o, i));
             try self.retired_listings.append(gpa, c.listing);

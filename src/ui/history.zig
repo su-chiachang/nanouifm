@@ -53,6 +53,16 @@ pub const History = struct {
         self.entries.items[self.index] = copy;
     }
 
+    /// The folder `back` would show, without moving.
+    pub fn peekBack(self: *const History) ?[]const u8 {
+        return if (self.canBack()) self.entries.items[self.index - 1] else null;
+    }
+
+    /// The folder `forward` would show, without moving.
+    pub fn peekForward(self: *const History) ?[]const u8 {
+        return if (self.canForward()) self.entries.items[self.index + 1] else null;
+    }
+
     /// Steps back; the folder now current, or null at the start.
     pub fn back(self: *History) ?[]const u8 {
         if (!self.canBack()) return null;

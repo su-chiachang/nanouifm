@@ -12,7 +12,7 @@ const layout_ops = @import("layout_ops.zig");
 /// Cmd+T and the "+" button: a tab in the same folder, right after the shown one, selected.
 pub fn newTab(m: *Model) Allocator.Error!void {
     const pane = m.focusedPane();
-    _ = try pane.addTab(pane.tab().path(), m.nextId(), m.show_hidden, null, true);
+    _ = try pane.addTabWith(pane.tab().path(), m.nextId(), m.opts(pane), null, true);
 }
 
 /// Cmd-click in the sidebar: `folder` in a new selected tab of the focused pane.
@@ -20,7 +20,7 @@ pub fn openInNewTab(m: *Model, folder: []const u8) Allocator.Error!void {
     const path = try model_mod.normalize(m.gpa, folder);
     defer m.gpa.free(path);
     const pane = m.focusedPane();
-    _ = try pane.addTab(path, m.nextId(), m.show_hidden, null, true);
+    _ = try pane.addTabWith(path, m.nextId(), m.opts(pane), null, true);
     m.clearNotice();
 }
 

@@ -347,6 +347,31 @@ pub fn runHeld() bool {
     return true;
 }
 
+/// How a test lists folders: inline (the default: the model's own synchronous code), through the
+/// asynchronous machinery with each read finished at once (`now`), or with each job HELD until the
+/// test releases it (`held`: `releaseListing`). Never a thread.
+pub const ListingMode = enum { sync, now, held };
+
+const listing_runner = @import("listing_runner.zig");
+
+/// The jobs `held` listing kept, oldest first.
+pub var held_listing: std.ArrayList(*listing_runner.Job) = .empty;
+
+pub fn holdListing(job: *listing_runner.Job) void {
+    held_listing.append(testing.allocator, job) catch @panic("out of memory");
+}
+
+/// Lets held job `i` read and deliver (it lands at the next pass).
+pub fn releaseListing(i: usize) void {
+    held_listing.orderedRemove(i).run();
+}
+
+/// Releases every held job, oldest first (what is left when a test ends).
+pub fn releaseAllListing() void {
+    while (held_listing.items.len > 0) releaseListing(0);
+    held_listing.clearAndFree(testing.allocator);
+}
+
 pub const Env = struct {
     fx: Fixture,
     m: app_view.State,
@@ -370,6 +395,7 @@ pub const Env = struct {
         volumes: ?@import("volumes.zig").Provider = null,
         /// A second favorite, titled "Fav2" (under the root).
         favorite2: ?[]const u8 = null,
+        listing: ListingMode = .sync,
     }) !void {
         env.fx = try Fixture.init();
         errdefer env.fx.deinit();
@@ -392,6 +418,7 @@ pub const Env = struct {
             nfavs += 1;
         }
         held_job = null;
+        held_listing = .empty;
         env.m = try app_view.State.init(testing.allocator, .{
             .start_path = env.fx.root,
             .home_path = env.fx.root,
@@ -401,6 +428,11 @@ pub const Env = struct {
             .opener = record,
             .hooks = test_hooks,
             .watch = o.watch,
+            .listing = switch (o.listing) {
+                .sync => null,
+                .now => .{ .runner = listing_runner.runNow },
+                .held => .{ .runner = holdListing },
+            },
             .index = switch (o.index) {
                 .off => null,
                 .now => .{ .roots = &.{index_root}, .runner = palette_index.runNow },
@@ -416,6 +448,7 @@ pub const Env = struct {
         _ = runHeld(); // a crawl nobody ran owns a share of the index
         env.t.deinit();
         env.m.deinit();
+        releaseAllListing(); // jobs that outlived the model free their own results
         env.fx.deinit();
     }
 

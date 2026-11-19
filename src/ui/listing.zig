@@ -4,6 +4,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const lister = @import("../core/lister.zig");
 const FileItem = lister.FileItem;
+pub const Preloaded = @import("listing_inbox.zig").Preloaded;
 
 pub const Listing = struct {
     /// Everything the lister returned, hidden items included (owned; freed with `lister.freeItems`).
@@ -13,21 +14,36 @@ pub const Listing = struct {
     /// Set when the folder could not be listed; the list area shows it.
     err: ?lister.ListError = null,
 
-    /// THE listing seam: the one place the app reads a folder from disk.
-    ///
-    /// NOTE: this runs synchronously on the main thread for now. A big or slow folder (network
-    /// volume, ~/Library) blocks the UI while it reads. Moving it off-main later means running
-    /// this function on a worker, handing the finished `[]FileItem` back through
-    /// `requestFrameFromAnyThread`/`objc.dispatchMain`, and having the model apply it as a
-    /// generation-checked result (see Swift's ListingCache). Everything else only sees `Listing`.
-    /// Hidden files are always listed; `rebuild` filters them, so toggling them needs no re-read.
+    /// THE listing seam: the one place the app reads a folder from disk. It blocks, so with an
+    /// asynchronous listing runner (`Config.listing`) it only ever runs on a worker thread, from
+    /// `listing_runner.Job.read`; the model's own code asks the loader (`listing_loader.zig`) for
+    /// folders and finds them already read (`fetch`). Without a runner (tests) the model reads
+    /// here, inline. Hidden files are always listed; `rebuild` filters them, so toggling them
+    /// needs no re-read.
     pub fn loadFolder(gpa: Allocator, path: []const u8) lister.ListError![]FileItem {
         return lister.list(gpa, path, true);
     }
 
+    /// `loadFolder`, unless the request that landed (`pre`) already read `path`.
+    pub fn fetch(gpa: Allocator, path: []const u8, pre: ?*Preloaded) lister.ListError![]FileItem {
+        if (pre) |p| {
+            if (p.take(path)) |r| return switch (r) {
+                .items => |items| items,
+                .err => |e| e,
+            };
+            p.misses += 1;
+        }
+        return loadFolder(gpa, path);
+    }
+
     /// The folder as a listing; one that can't be read becomes a listing with its error.
     pub fn read(gpa: Allocator, path: []const u8) Allocator.Error!Listing {
-        if (loadFolder(gpa, path)) |items| return fromItems(items) else |e| switch (e) {
+        return readVia(gpa, path, null);
+    }
+
+    /// `read` through a landing request's preloaded folders.
+    pub fn readVia(gpa: Allocator, path: []const u8, pre: ?*Preloaded) Allocator.Error!Listing {
+        if (fetch(gpa, path, pre)) |items| return fromItems(items) else |e| switch (e) {
             error.OutOfMemory => return error.OutOfMemory,
             else => return failed(e),
         }

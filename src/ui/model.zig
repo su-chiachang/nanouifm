@@ -9,7 +9,9 @@
 //! operations live in `layout_ops.zig` and `tab_ops.zig`.
 //!
 //! Everything about where the app starts is injected through `Config`: only main.zig knows the
-//! real home folder.
+//! real home folder. So is how folders are read: with `Config.listing` the tabs ask `loader` for
+//! them and the answers land at the start of a pass (`listing_apply.zig`); without it they are
+//! read inline.
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const lister = @import("../core/lister.zig");
@@ -51,6 +53,9 @@ const menu_link = @import("menu_link.zig");
 const state_model = @import("../core/state_model.zig");
 const sidebar_menu = @import("sidebar_menu.zig");
 const preview_state = @import("preview_state.zig");
+const listing_loader = @import("listing_loader.zig");
+const listing_runner = @import("listing_runner.zig");
+const listing_apply = @import("listing_apply.zig");
 
 pub const Item = sidebar_model.Item;
 pub const LayoutTree = pane_sizes.Tree;
@@ -84,6 +89,9 @@ pub const Config = struct {
     store: ?*persist.Store = null,
     /// The mounted volumes (`volumes.zig`): the Locations follow it. Null: `locations` stay as given.
     volumes: ?volumes.Provider = null,
+    /// Folder reads off the main thread (`listing_runner.zig`): main.zig passes a thread runner,
+    /// a test a held or immediate one. Null (the default): every folder is read inline.
+    listing: ?listing_runner.Config = null,
 };
 
 /// Files to move or copy into a folder (a drop from Finder or another pane).
@@ -290,6 +298,9 @@ pub const Model = struct {
     text_focus: bool = false,
     /// Thumbnails, picture sizes and Quick Look's bookkeeping (`preview_state.zig`).
     preview: preview_state.State,
+    /// Asks for folders to be read and takes the answers (`listing_loader.zig`); on the heap so
+    /// the tabs' options can point at it.
+    loader: *listing_loader.Loader,
 
     pub fn init(gpa: Allocator, cfg: Config) Allocator.Error!Model {
         const home = try normalize(gpa, cfg.home_path);
@@ -301,11 +312,13 @@ pub const Model = struct {
         errdefer gpa.destroy(signal);
         const start = try normalize(gpa, cfg.start_path);
         defer gpa.free(start);
+        const loader = try listing_loader.Loader.create(gpa, cfg.listing);
+        errdefer loader.destroy();
         var pane = try Pane.init(gpa, start, .{ .show_hidden = cfg.show_hidden }, .{ .pane = 1, .tab = 2 });
         errdefer pane.deinit();
         var pv = try preview_state.State.init(gpa);
         errdefer pv.deinit(gpa);
-        var m: Model = .{ .preview = pv, .gpa = gpa, .home = home, .sidebar = sb, .show_hidden = cfg.show_hidden, .layout = .{ .leaf = pane.id }, .next_id = 3, .opener = cfg.opener, .ops = file_ops.FileOperationService.init(gpa), .clip = Clipboard.init(gpa), .hooks = cfg.hooks, .watch = watch.Watchers.init(gpa, cfg.watch), .volumes = cfg.volumes, .vol_signal = signal };
+        var m: Model = .{ .preview = pv, .gpa = gpa, .home = home, .sidebar = sb, .show_hidden = cfg.show_hidden, .layout = .{ .leaf = pane.id }, .next_id = 3, .opener = cfg.opener, .ops = file_ops.FileOperationService.init(gpa), .clip = Clipboard.init(gpa), .hooks = cfg.hooks, .watch = watch.Watchers.init(gpa, cfg.watch), .volumes = cfg.volumes, .vol_signal = signal, .loader = loader };
         errdefer m.ops.deinit();
         errdefer m.clip.deinit();
         errdefer m.watch.deinit();
@@ -343,6 +356,7 @@ pub const Model = struct {
         self.sizes.deinit(self.gpa);
         self.persist.deinit(self.gpa);
         self.preview.deinit(self.gpa);
+        self.loader.destroy();
         self.gpa.destroy(self.vol_signal);
         self.sidebar.deinit();
         self.gpa.free(self.home);
@@ -358,9 +372,11 @@ pub const Model = struct {
         return &self.panes.items[self.focused];
     }
 
-    /// What listings are built with in `pane`.
+    /// What listings are built with in `pane` (and the loader, when listing is asynchronous).
     pub fn opts(self: *const Model, pane: *const Pane) TabOpts {
-        return pane.opts(self.show_hidden);
+        var o = pane.opts(self.show_hidden);
+        o.loader = self.loader.ifAsync();
+        return o;
     }
 
     pub fn paneIndex(self: *const Model, id: u32) ?usize {
@@ -397,12 +413,14 @@ pub const Model = struct {
         self.freeRetired();
         self.view_state.palette.freeRetired();
         _ = self.preview.thumbs.merge(); // thumbnails that arrived since the last pass
+        var changed = try listing_apply.drain(self); // folders read off the main thread
         if (self.vol_signal.take()) try sidebar_ops.refreshVolumes(self); // a mount, an unmount, a rename
         try nav_ops.syncColumns(self); // the shown tabs of column-view panes match their folders
-        var changed = try self.watch.refreshDirty(self); // folders that changed on disk
+        if (try self.watch.refreshDirty(self)) changed = true; // folders that changed on disk
         defer self.watch.reconcile(self) catch {}; // watch what is drawn after this pass
         defer filter_ops.syncNavigation(self) catch {}; // a folder left behind takes its filter along
         defer palette_ops.sync(self); // the palette's file index follows the sidebar's folders
+        defer _ = listing_apply.drain(self) catch false; // (first of these) a runner that read inside this pass's requests
         if (self.pending.items.len == 0) return changed;
         defer self.clearPending();
         // Actions don't queue more, but copy so the loop is safe if one ever does.
@@ -461,14 +479,15 @@ pub const Model = struct {
     pub fn navigate(self: *Model, path: []const u8) Allocator.Error!void {
         const p = try normalize(self.gpa, path);
         defer self.gpa.free(p);
-        self.focusedTab().visit(p, self.opts(self.focusedPane())) catch |e| switch (e) {
+        const o = self.opts(self.focusedPane());
+        self.focusedTab().visit(p, o) catch |e| switch (e) {
             error.OutOfMemory => return error.OutOfMemory,
             else => |le| return self.setNotice(p, le),
         };
-        self.clearNotice();
+        if (o.loader == null) self.clearNotice(); // asynchronously, the landing does (or raises the notice)
     }
 
-    fn setNotice(self: *Model, path: []const u8, e: lister.ListError) Allocator.Error!void {
+    pub fn setNotice(self: *Model, path: []const u8, e: lister.ListError) Allocator.Error!void {
         const name = std.fs.path.basename(path);
         const msg = try std.fmt.allocPrint(self.gpa, "Can't open \"{s}\". {s}", .{ if (name.len == 0) path else name, listing.errorText(e) });
         self.clearNotice();

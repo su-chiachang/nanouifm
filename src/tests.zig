@@ -33,6 +33,9 @@ test {
     _ = @import("ui/tests_path_bar.zig");
     _ = @import("ui/image_info.zig");
     _ = @import("ui/thumbs.zig");
+    _ = @import("ui/listing_inbox.zig");
+    _ = @import("ui/listing_loader.zig");
+    _ = @import("ui/tests_async.zig");
     _ = @import("ui/inspector_info.zig");
     // The menu bar and the real volumes are only ever wired by main.zig: compiled, never run.
     std.testing.refAllDecls(@import("ui/menu_bar.zig"));
@@ -41,6 +44,7 @@ test {
     std.testing.refAllDecls(@import("ui/system_hooks.zig"));
     std.testing.refAllDecls(@import("ui/system_quick_look.zig"));
     std.testing.refAllDecls(@import("ui/system_thumbs.zig"));
+    std.testing.refAllDecls(@import("ui/system_listing.zig"));
     std.testing.refAllDecls(@import("ui/system_share.zig"));
     std.testing.refAllDecls(@import("ui/cg_pixels.zig"));
     _ = @import("ui/tests_snapshot.zig");

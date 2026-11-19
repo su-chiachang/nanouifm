@@ -54,7 +54,7 @@ fn adopt(m: *Model, new_tree: *Tree, fresh: []const Pane, focus_id: u32) Allocat
 
 /// A new pane in `folder` with `like`'s sort order and view mode.
 fn newPane(m: *Model, folder: []const u8, like: *const Pane) Allocator.Error!Pane {
-    var p = try Pane.init(m.gpa, folder, .{ .show_hidden = m.show_hidden, .sort = like.sort }, .{ .pane = m.nextId(), .tab = m.nextId() });
+    var p = try Pane.init(m.gpa, folder, .{ .show_hidden = m.show_hidden, .sort = like.sort, .loader = m.loader.ifAsync() }, .{ .pane = m.nextId(), .tab = m.nextId() });
     p.view_mode = like.view_mode;
     return p;
 }

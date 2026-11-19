@@ -11,7 +11,7 @@ A native macOS file manager written in Zig on [nanoui](https://github.com/justra
 - Command palette (Cmd+K): fuzzy command search plus a background file index.
 - File operations with undo/redo (delete always means Move to Trash), inline rename, copy/paste, duplicate.
 - Context menus, native menu bar generated from one command registry, keyboard navigation, type-to-select.
-- Live refresh of every visible folder (kqueue-backed, debounced, nothing polls).
+- Live refresh of every visible folder (kqueue-backed, debounced, nothing polls); folders are listed off the main thread.
 - Inspector (Alt+Cmd+I) with details and image resolution, Quick Look (Space / Cmd+Y), Share.
 - Layout, tabs, favorites and preferences persist across launches.
 
@@ -56,10 +56,15 @@ Files stay at or under 600 lines (nanoui's rule). See `AGENTS.md` for the comman
 ## Known gaps
 
 - **Not verified in a running app** (compiled and wired, but tests cannot show a window): the real Quick Look panel,
-  thumbnails, the share sheet, native menu-bar key handling, volume mount notifications, and the real file watcher.
+  thumbnails, the share sheet, native menu-bar key handling, volume mount notifications, the real file watcher, and the
+  worker-thread listing runner (`system_listing.zig`; the held and immediate runners are tested).
 - Dragging items out of nanofm to Finder is not possible: nanoui's drag source writes plain text only. Dragging between
   panes and dropping files in from Finder work.
-- Folder listing runs on the main thread; very large folders can stall a frame.
+- Folder reads run on worker threads (navigation, back/forward, reload, columns, folders opened in place, new tabs and
+  panes); the tab shows its old folder with "Loading…" until the new one lands. Still read on the main thread: the start
+  folder at launch (before the first frame), and the refresh right after a file operation (the operations themselves
+  already run on the main thread). Sorting and filtering a landed listing (in memory) still happens on the main thread.
+  Two Back presses before the first one lands count as one.
 - Row icons are generic symbols, not per-file Finder icons.
 - No Open With submenu (default app only), no window growth when applying a layout preset.
 - Cross-volume moves fail with an error instead of copy-then-delete (nothing is ever unlinked); drops fall back to copy.

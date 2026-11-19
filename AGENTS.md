@@ -77,7 +77,16 @@ src/ui/         model.zig (app state, Config, queued Actions), pane.zig, tab.zig
                 follows the selection), quick_look_state.zig, `Hooks.quick_look`; main.zig-only system sides (never run in tests):
                 system_quick_look.zig (QLPreviewPanel via objc.defineClass), system_thumbs.zig (QLThumbnailGenerator) + cg_pixels.zig,
                 system_share.zig (NSSharingServicePicker); path_bar.zig crumbs are drop targets;
-                tests.zig, tests_*.zig + test_support.zig (`ts.Env`, `ts.IndexMode`)
+                async folder listing (`Config.listing`, null = every read inline, the test default): listing_loader.zig (the
+                loader on `Model.loader`: requests with generations, bounded, `Intent` = what runs when the folders are in),
+                listing_runner.zig (`Job.read` is the ONLY code that runs on a worker; `Job.deliver` runs on the main
+                thread into an inbox), listing_inbox.zig (`Preloaded`: folders already read, taken by the ordinary code through
+                `Tab.Opts.pre`), listing_apply.zig (`drain` at the start of `applyPending`: lands or drops results),
+                system_listing.zig (thread + `objc.dispatchMain`, main.zig only). `Tab.Opts.loader` is non-null only when a
+                runner is configured: `Tab.visit/back/forward/reload/setExpanded` and the column ops then REQUEST and return;
+                file operations (`file_refresh.folders`) still read inline. Tests: `ts.ListingMode` (`.held` keeps jobs until
+                `ts.releaseListing`), tests_async.zig;
+                tests.zig, tests_*.zig + test_support.zig (`ts.Env`, `ts.IndexMode`, `ts.ListingMode`)
 src/core/       the UI-free core library (`zig build test-core`)
 ```
 

@@ -33,6 +33,7 @@ pub const Pane = struct {
         var t = try Tab.init(gpa, folder, o);
         errdefer t.deinit();
         t.id = ids.tab;
+        if (o.later() != null) try t.reload(o); // asynchronous listing: its first one is asked for now
         try p.tabs.append(gpa, t);
         return p;
     }
@@ -73,9 +74,15 @@ pub const Pane = struct {
 
     /// A new tab in `folder`, listed with this pane's order.
     pub fn addTab(self: *Pane, folder: []const u8, tab_id: u32, show_hidden: bool, after: ?usize, select: bool) Allocator.Error!*Tab {
-        var t = try Tab.init(self.gpa, folder, self.opts(show_hidden));
+        return self.addTabWith(folder, tab_id, self.opts(show_hidden), after, select);
+    }
+
+    /// `addTab` with the listing options given (`Model.opts` adds the loader).
+    pub fn addTabWith(self: *Pane, folder: []const u8, tab_id: u32, o: Opts, after: ?usize, select: bool) Allocator.Error!*Tab {
+        var t = try Tab.init(self.gpa, folder, o);
         errdefer t.deinit();
         t.id = tab_id;
+        if (o.later() != null) try t.reload(o);
         return self.insertTab(t, after, select);
     }
 

@@ -78,6 +78,8 @@ without `--nanoui-snapshot` (no window appears; nothing is written outside `$sd`
   real file icons, real QuickLook thumbnails and 128 px icons in the inspector, the real file watcher refreshing a
   folder when a file is created from outside, the worker-thread listing runner doing that reload, saving state to
   `state.json` after opening a tab, and restoring the tabs on the next launch.
+- **Launched once with a visible window** (user-approved, no input sent, temp state folder): the bundled app stayed up
+  for 10 s with no error output, idled at 0.0% CPU (about 108 MB), and exited cleanly on SIGTERM.
 - **Not verified in a running app** (compiled and wired, but they need a visible window or real user input): the real
   Quick Look panel, the share sheet, the real window resize (`system_window.zig`), the NSWorkspace app list and launch
   (`system_open_with.zig`), native menu-bar key handling (including Cmd+W/T/D and Ctrl+Cmd+S, which the hidden run

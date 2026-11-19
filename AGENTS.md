@@ -36,9 +36,14 @@ Every command takes `--json` for output a program can read.
 ```
 build.zig       the app, `run` and `test` steps
 build.zig.zon   nanoui, pinned
-src/main.zig    the window
-src/app.zig     the state and its view
-src/tests.zig   the view's tests
+src/main.zig    the window (the only code that knows the real home folder)
+src/app.zig     the root view and the keyboard shortcuts
+src/tests.zig   imports the UI tests
+src/ui/         model.zig (app state, Config, queued Actions), pane.zig, tab.zig (folder,
+                history, selection, sort, listing), history.zig, selection.zig, listing.zig
+                (the one disk-read seam), sidebar_model.zig + sidebar.zig, list_pane.zig,
+                path_bar.zig, format.zig, style.zig, tests.zig + test_support.zig
+src/core/       the UI-free core library (`zig build test-core`)
 ```
 
 nanoui's README lists the widgets (`ui.div(c).row().gap(8)…`, text,

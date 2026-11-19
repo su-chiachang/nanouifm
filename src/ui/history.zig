@@ -45,6 +45,14 @@ pub const History = struct {
         self.index += 1;
     }
 
+    /// Makes `path` the current entry in place, without recording a visit (column view drilling).
+    pub fn replaceCurrent(self: *History, path: []const u8) Allocator.Error!void {
+        if (std.mem.eql(u8, path, self.current())) return;
+        const copy = try self.gpa.dupe(u8, path);
+        self.gpa.free(self.entries.items[self.index]);
+        self.entries.items[self.index] = copy;
+    }
+
     /// Steps back; the folder now current, or null at the start.
     pub fn back(self: *History) ?[]const u8 {
         if (!self.canBack()) return null;
@@ -61,6 +69,17 @@ pub const History = struct {
 };
 
 const testing = std.testing;
+
+test "replaceCurrent swaps the entry in place without a visit" {
+    var h = try History.init(testing.allocator, "/a");
+    defer h.deinit();
+    try h.push("/a/b");
+    try h.replaceCurrent("/a/b/c");
+    try testing.expectEqualStrings("/a/b/c", h.current());
+    try testing.expectEqual(@as(usize, 2), h.entries.items.len);
+    try testing.expectEqualStrings("/a", h.back().?);
+    try testing.expect(h.canForward());
+}
 
 test "push, back, forward" {
     var h = try History.init(testing.allocator, "/a");

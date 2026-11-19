@@ -9,6 +9,7 @@ const model = @import("ui/model.zig");
 const sidebar = @import("ui/sidebar.zig");
 const panes_view = @import("ui/panes_view.zig");
 const style = @import("ui/style.zig");
+const keys = @import("ui/keys.zig");
 
 pub const State = model.Model;
 pub const Config = model.Config;
@@ -26,9 +27,10 @@ pub fn view(m: *State, c: *ui.Context) void {
     sidebar.view(c, m);
 }
 
-/// Cmd+[ and Cmd+] (history), Cmd+Up (enclosing folder), Cmd+Down (open the selected folder),
+/// Cmd+[ and Cmd+] (history), Cmd+Up (enclosing folder), Cmd+Down (open the selection),
 /// Cmd+Shift+. (hidden files); Cmd+T / Cmd+W (new, close tab), Ctrl+Tab / Ctrl+Shift+Tab (cycle
 /// tabs); Cmd+D / Shift+Cmd+D (split side by side / stacked), Cmd+Opt+Left / Right (move focus).
+/// Arrows, Return, Cmd+1 / Cmd+2 and type-to-select are in `ui/keys.zig`.
 /// The key is the unshifted character, as `Shortcut` has it.
 fn shortcuts(c: *ui.Context, m: *State) void {
     if (c.shortcut(.{ .key = '[', .cmd = true })) m.queue(.back) catch {};
@@ -43,11 +45,5 @@ fn shortcuts(c: *ui.Context, m: *State) void {
     if (c.shortcut(.{ .key = 'd', .cmd = true, .shift = true })) m.queue(.{ .split = .stacked }) catch {};
     if (c.shortcut(.{ .key = ui.Shortcut.right, .cmd = true, .alt = true })) m.queue(.{ .focus_move = 1 }) catch {};
     if (c.shortcut(.{ .key = ui.Shortcut.left, .cmd = true, .alt = true })) m.queue(.{ .focus_move = -1 }) catch {};
-    if (c.shortcut(.{ .key = ui.Shortcut.down, .cmd = true })) {
-        const tab = m.focusedTab();
-        if (tab.selection.count() == 1) {
-            var it = tab.selection.set.keyIterator();
-            if (it.next()) |k| if (tab.listing.indexOf(k.*)) |i| if (tab.listing.visible[i].is_directory) m.queue(.{ .open = k.* }) catch {};
-        }
-    }
+    keys.view(c, m);
 }

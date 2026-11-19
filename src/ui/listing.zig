@@ -25,6 +25,14 @@ pub const Listing = struct {
         return lister.list(gpa, path, true);
     }
 
+    /// The folder as a listing; one that can't be read becomes a listing with its error.
+    pub fn read(gpa: Allocator, path: []const u8) Allocator.Error!Listing {
+        if (loadFolder(gpa, path)) |items| return fromItems(items) else |e| switch (e) {
+            error.OutOfMemory => return error.OutOfMemory,
+            else => return failed(e),
+        }
+    }
+
     /// Takes ownership of `items`.
     pub fn fromItems(items: []FileItem) Listing {
         return .{ .all = items };

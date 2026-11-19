@@ -11,5 +11,9 @@ test {
     _ = @import("ui/tests.zig");
     _ = @import("ui/tests_tabs.zig");
     _ = @import("ui/tests_split.zig");
+    _ = @import("ui/tests_columns.zig");
+    _ = @import("ui/tests_list_keys.zig");
     _ = @import("ui/tests_snapshot.zig");
+    _ = @import("ui/typeahead.zig");
+    _ = @import("ui/column_model.zig");
 }

@@ -55,3 +55,16 @@ pub const Columns = struct { kind: bool, date: bool };
 pub fn columnsFor(pane_w: f32) Columns {
     return .{ .kind = pane_w >= 430, .date = pane_w >= 620 };
 }
+
+/// Where a list at `id` (the id `c.peekId(null)` gave just before `ui.list`) should scroll to
+/// bring row `row` into sight, or null when it already is. `edge` is the list's padding above
+/// and below its rows.
+pub fn revealOffset(c: *ui.Context, id: u64, row: usize, row_h: f32, edge: f32) ?f32 {
+    const view_h = if (c.rects.get(id)) |r| r.h else c.size.h;
+    const cur = ui.scrollOffset(c, id, .y);
+    const top = edge + @as(f32, @floatFromInt(row)) * row_h;
+    const bottom = top + row_h + edge;
+    if (top - edge < cur) return @max(0, top - edge);
+    if (bottom > cur + view_h) return bottom - view_h;
+    return null;
+}

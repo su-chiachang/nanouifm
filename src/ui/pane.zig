@@ -9,7 +9,7 @@ const tab_mod = @import("tab.zig");
 const Tab = tab_mod.Tab;
 const Opts = tab_mod.Opts;
 
-pub const ViewMode = enum { list };
+pub const ViewMode = enum { list, column };
 
 pub const Pane = struct {
     gpa: Allocator,

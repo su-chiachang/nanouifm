@@ -42,7 +42,10 @@ src/tests.zig   imports the UI tests
 src/ui/         model.zig (app state, Config, queued Actions), pane.zig, tab.zig (folder,
                 history, selection, sort, listing), history.zig, selection.zig, listing.zig
                 (the one disk-read seam), sidebar_model.zig + sidebar.zig, list_pane.zig,
-                path_bar.zig, format.zig, style.zig, tests.zig + test_support.zig
+                path_bar.zig, format.zig, style.zig; list keys/expansion: keys.zig, nav_ops.zig, list_nav.zig,
+                expansion.zig, typeahead.zig; column view: column_model.zig, column_ops.zig,
+                column_view.zig, column_preview.zig; opener.zig (injected file opener, null in tests);
+                tests.zig + test_support.zig
 src/core/       the UI-free core library (`zig build test-core`)
 ```
 

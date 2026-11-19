@@ -15,6 +15,7 @@ const Allocator = std.mem.Allocator;
 const lister = @import("../core/lister.zig");
 const pane_layout = @import("../core/pane_layout.zig");
 const Pane = @import("pane.zig").Pane;
+const ViewMode = @import("pane.zig").ViewMode;
 const Tab = @import("tab.zig").Tab;
 const TabOpts = @import("tab.zig").Opts;
 const listing = @import("listing.zig");
@@ -22,6 +23,10 @@ const sidebar_model = @import("sidebar_model.zig");
 const pane_sizes = @import("pane_sizes.zig");
 const layout_ops = @import("layout_ops.zig");
 const tab_ops = @import("tab_ops.zig");
+const nav_ops = @import("nav_ops.zig");
+const NavKey = @import("nav_key.zig").NavKey;
+const TypeAhead = @import("typeahead.zig").TypeAhead;
+const opener = @import("opener.zig");
 
 pub const Item = sidebar_model.Item;
 pub const LayoutTree = pane_sizes.Tree;
@@ -40,6 +45,9 @@ pub const Config = struct {
     pinned: []const Item = &.{},
     locations: []const Item = &.{},
     show_hidden: bool = false,
+    /// How a file is opened (double-click, Return). Null: files are not opened. Only main.zig
+    /// passes `opener.system`, so no test can launch an app by accident; tests pass a recorder.
+    opener: ?opener.OpenFn = null,
 };
 
 /// What the view asks for. Applied by `Model.applyPending`.
@@ -72,7 +80,34 @@ pub const Action = union(enum) {
     split: SplitAxis,
     close_pane: u32,
     apply_preset: LayoutPreset,
+    /// Cmd+1 (list), Cmd+2 (column) and the toolbar's toggle: the focused pane's view mode.
+    set_view_mode: ViewMode,
+    /// An arrow key, Home or End in the focused pane (Shift extends the selection).
+    nav: struct { key: NavKey, shift: bool },
+    /// A typed character in the focused pane: jumps to the first name starting with what was
+    /// typed lately. `time` is the frame's clock, in seconds.
+    type_select: struct { key: u21, time: f64 },
+    /// Return and Cmd+Down: opens what is selected in the focused pane (a folder goes there,
+    /// files open in their default apps).
+    open_selection,
+    /// Double-click on a file (the path is owned by the queue).
+    open_file: []const u8,
+    /// A disclosure triangle of the list: opens or closes that folder in place (path owned by the queue).
+    toggle_expand: struct { pane: u32, path: []const u8 },
+    /// A click on row `index` of column `depth` of a pane's column view.
+    column_click: struct { pane: u32, depth: u32, index: u32, cmd: bool, shift: bool },
 };
+
+/// The path an action owns, if it has one.
+fn ownedPath(a: *Action) ?*[]const u8 {
+    return switch (a.*) {
+        .open => |*p| p,
+        .open_in_new_tab => |*p| p,
+        .open_file => |*p| p,
+        .toggle_expand => |*e| &e.path,
+        else => null,
+    };
+}
 
 /// What the view keeps between frames that is not model data.
 pub const ViewState = struct {
@@ -80,6 +115,8 @@ pub const ViewState = struct {
     divider: ?struct { split: u32, index: u32, last: f32 } = null,
     /// A tab pressed: it follows the pointer along the strip once the pointer has moved.
     tab_drag: ?struct { tab: TabRef, start_x: f32, moving: bool } = null,
+    /// A column's divider pressed: which one, and where the pointer last was.
+    col_drag: ?struct { pane: u32, depth: u32, last: f32 } = null,
     layout_menu_open: bool = false,
     /// The layout button's rectangle (window points), where its popover hangs.
     layout_anchor: ?pane_sizes.Rect = null,
@@ -108,6 +145,10 @@ pub const Model = struct {
     /// A message for the banner above the list (a folder that couldn't be opened).
     notice: ?[]u8 = null,
     pending: std.ArrayList(Action) = .empty,
+    /// Opens files; see `Config.opener`.
+    opener: ?opener.OpenFn = null,
+    /// What type-to-select has heard lately.
+    typeahead: TypeAhead = .{},
 
     pub fn init(gpa: Allocator, cfg: Config) Allocator.Error!Model {
         const home = try normalize(gpa, cfg.home_path);
@@ -118,7 +159,7 @@ pub const Model = struct {
         defer gpa.free(start);
         var pane = try Pane.init(gpa, start, .{ .show_hidden = cfg.show_hidden }, .{ .pane = 1, .tab = 2 });
         errdefer pane.deinit();
-        var m: Model = .{ .gpa = gpa, .home = home, .sidebar = sb, .show_hidden = cfg.show_hidden, .layout = .{ .leaf = pane.id }, .next_id = 3 };
+        var m: Model = .{ .gpa = gpa, .home = home, .sidebar = sb, .show_hidden = cfg.show_hidden, .layout = .{ .leaf = pane.id }, .next_id = 3, .opener = cfg.opener };
         errdefer m.sizes.deinit(gpa);
         try m.sizes.reset(gpa, &m.layout);
         try m.panes.append(gpa, pane);
@@ -175,31 +216,20 @@ pub const Model = struct {
 
     pub fn queue(self: *Model, a: Action) Allocator.Error!void {
         var act = a;
-        switch (act) {
-            .open => |p| act.open = try self.gpa.dupe(u8, p),
-            .open_in_new_tab => |p| act.open_in_new_tab = try self.gpa.dupe(u8, p),
-            else => {},
-        }
-        errdefer switch (act) {
-            .open => |p| self.gpa.free(p),
-            .open_in_new_tab => |p| self.gpa.free(p),
-            else => {},
-        };
+        if (ownedPath(&act)) |p| p.* = try self.gpa.dupe(u8, p.*);
+        errdefer if (ownedPath(&act)) |p| self.gpa.free(p.*);
         try self.pending.append(self.gpa, act);
     }
 
     fn clearPending(self: *Model) void {
-        for (self.pending.items) |a| switch (a) {
-            .open => |p| self.gpa.free(p),
-            .open_in_new_tab => |p| self.gpa.free(p),
-            else => {},
-        };
+        for (self.pending.items) |*a| if (ownedPath(a)) |p| self.gpa.free(p.*);
         self.pending.clearRetainingCapacity();
     }
 
     /// Runs the queued actions in order; true if there were any.
     pub fn applyPending(self: *Model) Allocator.Error!bool {
         self.freeRetired();
+        try nav_ops.syncColumns(self); // the shown tabs of column-view panes match their folders
         if (self.pending.items.len == 0) return false;
         defer self.clearPending();
         // Actions don't queue more, but copy so the loop is safe if one ever does.
@@ -226,6 +256,13 @@ pub const Model = struct {
             .split => |axis| try layout_ops.split(self, axis),
             .close_pane => |id| if (self.paneIndex(id)) |i| try layout_ops.closePane(self, i),
             .apply_preset => |p| try layout_ops.applyPreset(self, p),
+            .set_view_mode => |mode| try nav_ops.setViewMode(self, mode),
+            .nav => |n| try nav_ops.key(self, n.key, n.shift),
+            .type_select => |t| try nav_ops.typeSelect(self, t.key, t.time),
+            .open_selection => try nav_ops.openSelection(self),
+            .open_file => |p| try self.openFile(p),
+            .toggle_expand => |e| try nav_ops.toggleExpand(self, e.pane, e.path),
+            .column_click => |c| try nav_ops.columnClick(self, c.pane, c.depth, c.index, .{ .cmd = c.cmd, .shift = c.shift }),
         };
         return true;
     }
@@ -274,11 +311,22 @@ pub const Model = struct {
         try self.navigate(parent);
     }
 
-    /// Double-click or Return on row `index` of the focused tab: folders open (files don't, yet).
+    /// Double-click on row `index` of the focused tab's list: a folder opens, a file opens in
+    /// its app.
     pub fn openItem(self: *Model, index: usize) Allocator.Error!void {
-        const items = self.focusedTab().listing.visible;
+        const items = self.focusedTab().exp.items;
         if (index >= items.len) return;
-        if (items[index].is_directory) try self.navigate(items[index].path);
+        if (items[index].is_directory) try self.navigate(items[index].path) else try self.openFile(items[index].path);
+    }
+
+    /// Opens a file in its default app through the injected opener (none: nothing happens); a
+    /// failure raises a notice.
+    pub fn openFile(self: *Model, path: []const u8) Allocator.Error!void {
+        const f = self.opener orelse return;
+        if (f(path)) return;
+        const msg = try std.fmt.allocPrint(self.gpa, "Can't open \"{s}\".", .{std.fs.path.basename(path)});
+        self.clearNotice();
+        self.notice = msg;
     }
 
     pub fn setShowHidden(self: *Model, on: bool) Allocator.Error!void {

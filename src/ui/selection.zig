@@ -14,6 +14,9 @@ pub const Selection = struct {
     set: std.StringHashMapUnmanaged(void) = .empty,
     /// The row a shift-click extends from (owned path).
     anchor: ?[]u8 = null,
+    /// The row the keyboard moves from: the one last clicked or arrowed to (owned path). Shift+arrow
+    /// grows the range between the anchor and it.
+    lead: ?[]u8 = null,
 
     pub fn deinit(self: *Selection, gpa: Allocator) void {
         self.clear(gpa);
@@ -35,6 +38,8 @@ pub const Selection = struct {
         self.set.clearRetainingCapacity();
         if (self.anchor) |a| gpa.free(a);
         self.anchor = null;
+        if (self.lead) |l| gpa.free(l);
+        self.lead = null;
     }
 
     fn add(self: *Selection, gpa: Allocator, path: []const u8) Allocator.Error!void {
@@ -54,6 +59,41 @@ pub const Selection = struct {
         self.anchor = copy;
     }
 
+    fn setLead(self: *Selection, gpa: Allocator, path: []const u8) Allocator.Error!void {
+        const copy = try gpa.dupe(u8, path);
+        if (self.lead) |l| gpa.free(l);
+        self.lead = copy;
+    }
+
+    /// The row the keyboard moves from (the lead, else the anchor).
+    pub fn leadIndex(self: *const Selection, items: []const FileItem) ?usize {
+        if (self.lead) |l| for (items, 0..) |it, i| if (std.mem.eql(u8, it.path, l)) return i;
+        return self.anchorIndex(items);
+    }
+
+    /// Selects just `path` (it need not be in a listing), as a plain click does.
+    pub fn selectOnly(self: *Selection, gpa: Allocator, path: []const u8) Allocator.Error!void {
+        self.clearSet(gpa);
+        try self.add(gpa, path);
+        try self.setAnchor(gpa, path);
+        try self.setLead(gpa, path);
+    }
+
+    /// Becomes a copy of `other`.
+    pub fn copyFrom(self: *Selection, gpa: Allocator, other: *const Selection) Allocator.Error!void {
+        self.clear(gpa);
+        var it = other.set.keyIterator();
+        while (it.next()) |k| try self.add(gpa, k.*);
+        if (other.anchor) |a| try self.setAnchor(gpa, a);
+        if (other.lead) |l| try self.setLead(gpa, l);
+    }
+
+    /// The keyboard moved to row `index` (arrows, Home, End): `extend` (Shift) grows the range
+    /// from the anchor, otherwise that row alone is selected.
+    pub fn moveTo(self: *Selection, gpa: Allocator, items: []const FileItem, index: usize, extend: bool) Allocator.Error!void {
+        try self.click(gpa, items, index, .{ .shift = extend });
+    }
+
     fn anchorIndex(self: *const Selection, items: []const FileItem) ?usize {
         const a = self.anchor orelse return null;
         for (items, 0..) |it, i| if (std.mem.eql(u8, it.path, a)) return i;
@@ -69,6 +109,7 @@ pub const Selection = struct {
             const lo = @min(from, index);
             const hi = @max(from, index);
             for (items[lo .. hi + 1]) |it| try self.add(gpa, it.path);
+            try self.setLead(gpa, path);
             return; // the anchor stays where it was
         };
         if (mods.cmd) {
@@ -78,6 +119,7 @@ pub const Selection = struct {
             try self.add(gpa, path);
         }
         try self.setAnchor(gpa, path);
+        try self.setLead(gpa, path);
     }
 
     fn clearSet(self: *Selection, gpa: Allocator) void {
@@ -99,6 +141,10 @@ pub const Selection = struct {
         if (self.anchor) |a| if (!present.contains(a)) {
             gpa.free(a);
             self.anchor = null;
+        };
+        if (self.lead) |l| if (!present.contains(l)) {
+            gpa.free(l);
+            self.lead = null;
         };
     }
 };
@@ -126,6 +172,26 @@ test "click, cmd-click and shift-click" {
     try testing.expect(!s.contains("/a") and s.contains("/c") and s.contains("/e"));
     try s.click(gpa, &items, 0, .{});
     try testing.expect(s.count() == 1 and s.contains("/a"));
+}
+
+test "keyboard moves: plain selects one, shift extends from the anchor" {
+    const gpa = testing.allocator;
+    const items = [_]FileItem{ fake("/a"), fake("/b"), fake("/c"), fake("/d") };
+    var s: Selection = .{};
+    defer s.deinit(gpa);
+    try s.moveTo(gpa, &items, 1, false);
+    try s.moveTo(gpa, &items, 2, true);
+    try s.moveTo(gpa, &items, 3, true);
+    try testing.expectEqual(@as(usize, 3), s.count()); // b..d
+    try testing.expectEqual(@as(?usize, 3), s.leadIndex(&items));
+    try s.moveTo(gpa, &items, 2, true); // shrinks back toward the anchor
+    try testing.expect(s.count() == 2 and !s.contains("/d"));
+    try s.moveTo(gpa, &items, 0, false);
+    try testing.expect(s.count() == 1 and s.contains("/a"));
+    var copy: Selection = .{};
+    defer copy.deinit(gpa);
+    try copy.copyFrom(gpa, &s);
+    try testing.expect(copy.contains("/a") and copy.leadIndex(&items) == 0);
 }
 
 test "prune drops vanished paths" {

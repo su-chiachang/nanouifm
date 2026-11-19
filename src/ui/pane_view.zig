@@ -11,6 +11,7 @@ const pane_sizes = @import("pane_sizes.zig");
 const style = @import("style.zig");
 const tab_strip = @import("tab_strip.zig");
 const list_pane = @import("list_pane.zig");
+const column_view = @import("column_view.zig");
 const path_bar = @import("path_bar.zig");
 
 pub fn view(c: *ui.Context, m: *Model, index: usize, rect: pane_sizes.Rect, area: pane_sizes.Rect) void {
@@ -27,7 +28,10 @@ pub fn view(c: *ui.Context, m: *Model, index: usize, rect: pane_sizes.Rect, area
     ui.divider(c);
     toolbar(c, m, pane);
     ui.divider(c);
-    list_pane.view(c, m, pane, focused, rect.w);
+    switch (pane.view_mode) {
+        .list => list_pane.view(c, m, pane, focused, rect.w),
+        .column => column_view.view(c, m, pane, focused),
+    }
     ui.divider(c);
     path_bar.view(c, m, pane, rect.w);
 
@@ -50,6 +54,8 @@ fn toolbar(c: *ui.Context, m: *Model, pane: *Pane) void {
         defer t.end();
         ui.text(c, tab.title(), .{ .size = 14, .weight = .semibold, .truncate = .ellipsis });
     }
+    if (style.iconButton(c, "mode-list", "list.bullet", true, pane.view_mode == .list)) act(c, m, pane, .{ .set_view_mode = .list });
+    if (style.iconButton(c, "mode-column", "rectangle.split.3x1", true, pane.view_mode == .column)) act(c, m, pane, .{ .set_view_mode = .column });
     if (style.iconButton(c, "hidden", if (m.show_hidden) "eye" else "eye.slash", true, m.show_hidden)) act(c, m, pane, .toggle_hidden);
 }
 

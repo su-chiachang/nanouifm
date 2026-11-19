@@ -5,6 +5,7 @@ const nanoui = @import("nanoui");
 const app_view = @import("app.zig");
 const state_model = @import("core/state_model.zig");
 const sidebar_model = @import("ui/sidebar_model.zig");
+const opener = @import("ui/opener.zig");
 
 pub const panic = nanoui.panic;
 pub const std_options = nanoui.std_options;
@@ -44,6 +45,8 @@ fn run(init: nanoui.Init) !void {
         // A stub: the startup volume. Mounted volumes (live) come in a later slice.
         .locations = &.{.{ .path = "/", .title = "Macintosh HD" }},
         .show_hidden = persisted.show_hidden,
+        // The only place a real app can be launched from.
+        .opener = opener.system,
     });
     defer state.deinit();
 

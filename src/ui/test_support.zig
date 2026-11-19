@@ -84,14 +84,57 @@ pub fn clickTextWith(t: *ui.Tester, s: []const u8, mods: struct { cmd: bool = fa
     t.setMods(.{});
 }
 
-/// A model starting in the fixture's root (also its home), with `favorites` in the sidebar.
+/// A model starting in the fixture's root (also its home), with `favorites` in the sidebar. Its
+/// opener is the recorder below: no test ever launches an app.
 pub fn model(fx: *Fixture, favorites: []const app_view.Item) !app_view.State {
+    return modelAt(fx, "", favorites);
+}
+
+/// `model`, starting in `rel` under the fixture's root (home stays the root).
+pub fn modelAt(fx: *Fixture, rel: []const u8, favorites: []const app_view.Item) !app_view.State {
+    const start = try fx.sub(rel);
+    defer testing.allocator.free(start);
     return app_view.State.init(testing.allocator, .{
-        .start_path = fx.root,
+        .start_path = start,
         .home_path = fx.root,
         .favorites = favorites,
         .locations = &.{.{ .path = "/", .title = "Volume" }},
+        .opener = record,
     });
+}
+
+/// The files the recording opener was asked to open (owned; `resetOpened` frees them).
+pub var opened: std.ArrayList([]u8) = .empty;
+
+fn record(path: []const u8) bool {
+    const copy = testing.allocator.dupe(u8, path) catch return false;
+    opened.append(testing.allocator, copy) catch {
+        testing.allocator.free(copy);
+        return false;
+    };
+    return true;
+}
+
+pub fn resetOpened() void {
+    for (opened.items) |p| testing.allocator.free(p);
+    opened.deinit(testing.allocator);
+    opened = .empty;
+}
+
+/// Presses a key (a `ui.Shortcut` code, `mods` held) and lets the queued action run; the view
+/// must have taken it.
+pub fn press(t: *ui.Tester, key: u21, mods: struct { cmd: bool = false, shift: bool = false }) !void {
+    if (!t.shortcut(.{ .key = key, .cmd = mods.cmd, .shift = mods.shift })) return error.KeyNotTaken;
+    t.settle(0.2);
+}
+
+/// Where the first node drawing icon `symbol` at or below `min_y` is (window points).
+pub fn iconRectBelow(t: *ui.Tester, symbol: []const u8, min_y: f32) ?ui.Rect {
+    for (t.ctx.nodes.items) |n| switch (n.content) {
+        .icon => |ic| if (std.mem.eql(u8, ic.name, symbol) and n.rect.y >= min_y) return n.rect,
+        else => {},
+    };
+    return null;
 }
 
 const Rect = @import("pane_sizes.zig").Rect;

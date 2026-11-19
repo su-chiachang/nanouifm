@@ -24,7 +24,7 @@ pub fn view(c: *ui.Context, m: *Model, pane: *Pane, focused: bool, w: f32) void 
     rows(c, m, pane, tab, cols);
 }
 
-fn banner(c: *ui.Context, m: *Model, text: []const u8) void {
+pub fn banner(c: *ui.Context, m: *Model, text: []const u8) void {
     const th = c.theme;
     const b = ui.div(c).row().wFull().px(style.pad).py(6).gap(8).itemsCenter().bg(th.danger.alpha(0.12)).control();
     defer b.end();
@@ -72,7 +72,7 @@ fn rows(c: *ui.Context, m: *Model, pane: *const Pane, tab: *Tab, cols: style.Col
     ui.keyInt(c, tab.id);
     const area = ui.div(c).column().wFull().grow().clip();
     defer area.end();
-    const items = tab.listing.visible;
+    const items = tab.exp.items;
     if (tab.listing.err) |e| {
         const msg = ui.div(c).sizeFull().center();
         defer msg.end();
@@ -85,11 +85,18 @@ fn rows(c: *ui.Context, m: *Model, pane: *const Pane, tab: *Tab, cols: style.Col
         ui.text(c, "This folder is empty", .{ .size = 13, .color = th.muted });
         return;
     }
+    const pad: f32 = 2;
+    const list_id = c.peekId(null);
+    var scroll_to: ?f32 = if (tab.scroll_reset) 0 else null;
+    if (tab.reveal) |row| {
+        scroll_to = style.revealOffset(c, list_id, row, style.row_height, pad) orelse scroll_to;
+        tab.reveal = null;
+    }
     var list = ui.list(c, .{
         .count = items.len,
         .row_height = style.row_height,
-        .padding = .{ .left = style.pad, .right = style.pad, .top = 2, .bottom = 2 },
-        .scroll_to = if (tab.scroll_reset) 0 else null,
+        .padding = .{ .left = style.pad, .right = style.pad, .top = pad, .bottom = pad },
+        .scroll_to = scroll_to,
     });
     tab.scroll_reset = false;
     while (list.next()) |i| {
@@ -98,13 +105,17 @@ fn rows(c: *ui.Context, m: *Model, pane: *const Pane, tab: *Tab, cols: style.Col
         var r = ui.div(c).row().wFull().h(style.row_height).px(6).itemsCenter().rounded(6).control();
         r = if (selected) r.bg(th.accent) else r.hover(th.surface_hover);
         defer r.end();
-        rowCells(c, item, selected, cols);
+        const toggled = rowCells(c, item, tab.exp.depth[i], tab.exp.isExpanded(item.path), selected, cols);
         const it = r.interaction();
-        if (it.clicked) {
+        if (toggled) {
+            c.changed = true;
+            style.post(c, m, .{ .focus_pane = pane.id });
+            style.post(c, m, .{ .toggle_expand = .{ .pane = pane.id, .path = item.path } });
+        } else if (it.clicked) {
             c.changed = true;
             style.post(c, m, .{ .focus_pane = pane.id });
             if (it.double_clicked) {
-                if (item.is_directory) style.post(c, m, .{ .open = item.path });
+                style.post(c, m, if (item.is_directory) .{ .open = item.path } else .{ .open_file = item.path });
             } else {
                 tab.selection.click(m.gpa, items, i, .{ .cmd = c.input.cmd, .shift = c.input.shift }) catch {};
             }
@@ -113,13 +124,19 @@ fn rows(c: *ui.Context, m: *Model, pane: *const Pane, tab: *Tab, cols: style.Col
     list.end();
 }
 
-fn rowCells(c: *ui.Context, item: lister.FileItem, selected: bool, cols: style.Columns) void {
+/// How far each level of an opened folder's rows is indented.
+const indent: f32 = 16;
+
+/// One row's cells; true if its disclosure triangle was clicked.
+fn rowCells(c: *ui.Context, item: lister.FileItem, depth: u16, expanded: bool, selected: bool, cols: style.Columns) bool {
     const th = c.theme;
     const fg: ui.Color = if (selected) th.accent_text else th.text;
     const dim: ui.Color = if (selected) th.accent_text.alpha(0.85) else th.muted;
+    var toggled = false;
     {
-        const name = ui.div(c).row().grow().minW(0).gap(8).pr(8).itemsCenter().clip();
+        const name = ui.div(c).row().grow().minW(0).gap(6).pr(8).pl(@as(f32, @floatFromInt(depth)) * indent).itemsCenter().clip();
         defer name.end();
+        toggled = triangle(c, item.is_directory, expanded, selected);
         ui.icon(c, if (item.is_directory) "folder.fill" else if (item.is_package) "app" else "doc", .{
             .size = 14,
             .frame = 16,
@@ -146,4 +163,20 @@ fn rowCells(c: *ui.Context, item: lister.FileItem, selected: bool, cols: style.C
         const txt = if (item.modified) |ns| format.localDate(&buf, ns) else "--";
         ui.text(c, c.print("{s}", .{txt}), .{ .size = 12, .color = dim });
     }
+    return toggled;
+}
+
+/// The disclosure triangle of a folder row (a blank slot of the same width for a file).
+fn triangle(c: *ui.Context, is_folder: bool, expanded: bool, selected: bool) bool {
+    ui.key(c, "tri");
+    const slot = ui.div(c).row().w(14).h(style.row_height).center();
+    defer slot.end();
+    if (!is_folder) return false;
+    ui.icon(c, if (expanded) "arrowtriangle.down.fill" else "arrowtriangle.right.fill", .{
+        .size = 8,
+        .frame = 14,
+        .color = if (selected) c.theme.accent_text else c.theme.muted,
+    });
+    const it = slot.interaction();
+    return it.clicked;
 }

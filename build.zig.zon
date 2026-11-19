@@ -1,0 +1,10 @@
+.{
+    .name = .nanofm,
+    .version = "0.0.1",
+    .minimum_zig_version = "0.17.1",
+    .dependencies = .{
+        .nanoui = .{ .path = "../../ref/nanoui" },
+    },
+    .paths = .{ "build.zig", "build.zig.zon", "src" },
+    .fingerprint = 0xbfb84c9dba919864,
+}

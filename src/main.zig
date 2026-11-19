@@ -1,0 +1,20 @@
+//! Nanofm: one window showing the view in app.zig.
+const nanoui = @import("nanoui");
+const app_view = @import("app.zig");
+
+pub const panic = nanoui.panic;
+pub const std_options = nanoui.std_options;
+pub const std_options_debug_threaded_io = nanoui.std_options_debug_threaded_io;
+
+pub fn main(init: nanoui.Init) void {
+    const app = nanoui.App.create(init, .{ .name = "Nanofm" }) catch return;
+    defer app.destroy();
+    var state: app_view.State = .{};
+    _ = app.newWindow(.{
+        .title = "Nanofm",
+        .width = 480,
+        .height = 360,
+        .content = .{ .view = .init(&state, app_view.State.view) },
+    }) catch return;
+    app.run() catch return;
+}

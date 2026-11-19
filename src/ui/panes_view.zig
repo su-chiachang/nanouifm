@@ -17,11 +17,11 @@ const grab_slop: f32 = 4;
 
 /// Where every pane and divider is now (window points), for a window of `size`.
 pub fn frame(arena: std.mem.Allocator, m: *const Model, size: ui.Size) std.mem.Allocator.Error!pane_sizes.Frame {
-    return pane_sizes.layout(arena, &m.layout, &m.sizes, style.panesBounds(size.w, size.h));
+    return pane_sizes.layout(arena, &m.layout, &m.sizes, style.panesBounds(size.w, size.h, m.sidebar_visible));
 }
 
 pub fn view(c: *ui.Context, m: *Model) void {
-    const area = style.panesBounds(c.size.w, c.size.h);
+    const area = style.panesBounds(c.size.w, c.size.h, m.sidebar_visible);
     const fr = frame(c.alloc(), m, c.size) catch return;
     const root = ui.div(c).absolute().offset(area.x, area.y).size(area.w, area.h).bg(c.theme.surface);
     defer root.end();

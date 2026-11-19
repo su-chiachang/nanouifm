@@ -44,6 +44,12 @@ const palette_exec = @import("palette_exec.zig");
 const palette_ops = @import("palette_ops.zig");
 const filter_ops = @import("filter_ops.zig");
 const toolbar_menu = @import("toolbar_menu.zig");
+const persist = @import("persist.zig");
+const volumes = @import("volumes.zig");
+const sidebar_ops = @import("sidebar_ops.zig");
+const menu_link = @import("menu_link.zig");
+const state_model = @import("../core/state_model.zig");
+const sidebar_menu = @import("sidebar_menu.zig");
 
 pub const Item = sidebar_model.Item;
 pub const LayoutTree = pane_sizes.Tree;
@@ -72,6 +78,11 @@ pub const Config = struct {
     /// The command palette's file index: null (default, tests) builds none; main.zig passes the
     /// roots and a thread, tests their temp folders and a runner of their own.
     index: ?palette_index.Config = null,
+    /// Where favorites, pinned, the layout and the settings are kept (`persist.zig`); null: nothing
+    /// is read or written. main.zig passes the real one, tests a store over a temp folder.
+    store: ?*persist.Store = null,
+    /// The mounted volumes (`volumes.zig`): the Locations follow it. Null: `locations` stay as given.
+    volumes: ?volumes.Provider = null,
 };
 
 /// Files to move or copy into a folder (a drop from Finder or another pane).
@@ -140,13 +151,26 @@ pub const Action = union(enum) {
     apply_filter: u32,
     /// The palette chose a folder or a file (the path is owned by the queue).
     palette_open: palette_model.Open,
+    /// Open in Split from the sidebar: a pane docked beside the focused one (path owned by the queue).
+    open_in_split: []const u8,
+    /// Remove from Sidebar: the favorite or pin with this id.
+    sidebar_remove: state_model.Uuid,
+    /// A folder dropped on Favorites or Pinned (path owned by the queue), at a row or the end.
+    sidebar_add: SidebarAdd,
+    /// Drag to reorder: the entry goes to this row of the section (possibly the other one).
+    sidebar_move: struct { id: state_model.Uuid, kind: sidebar_model.SectionKind, to: u32 },
+    /// The eject button of a volume (path owned by the queue).
+    eject: []const u8,
 };
+
+pub const SidebarAdd = struct { path: []const u8, kind: sidebar_model.SectionKind, at: ?u32 = null };
 
 /// A copy of `a` that owns its strings (what `Model.queue` keeps), and the matching free.
 fn dupeOwned(gpa: Allocator, a: Action) Allocator.Error!Action {
     var act = a;
     switch (act) {
-        .open, .open_in_new_tab, .open_file => |*p| p.* = try gpa.dupe(u8, p.*),
+        .open, .open_in_new_tab, .open_file, .open_in_split, .eject => |*p| p.* = try gpa.dupe(u8, p.*),
+        .sidebar_add => |*sa| sa.path = try gpa.dupe(u8, sa.path),
         .toggle_expand => |*e| e.path = try gpa.dupe(u8, e.path),
         .palette_open => |*o| o.path = try gpa.dupe(u8, o.path),
         .drop_files => |*d| {
@@ -171,7 +195,8 @@ fn dupeOwned(gpa: Allocator, a: Action) Allocator.Error!Action {
 
 fn freeOwned(gpa: Allocator, a: Action) void {
     switch (a) {
-        .open, .open_in_new_tab, .open_file => |p| gpa.free(p),
+        .open, .open_in_new_tab, .open_file, .open_in_split, .eject => |p| gpa.free(p),
+        .sidebar_add => |sa| gpa.free(sa.path),
         .toggle_expand => |e| gpa.free(e.path),
         .palette_open => |o| gpa.free(o.path),
         .drop_files => |d| {
@@ -204,6 +229,8 @@ pub const ViewState = struct {
     focus_filter: ?u32 = null,
     /// The command palette (Cmd+K).
     palette: palette_model.State = .{},
+    /// The sidebar's context menu.
+    sidebar_menu: sidebar_menu.State = .{},
 };
 
 pub const Model = struct {
@@ -226,6 +253,8 @@ pub const Model = struct {
     view_state: ViewState = .{},
     /// Global for now; the persisted state keeps it with the layout.
     show_hidden: bool,
+    /// The sidebar is shown (Ctrl+Cmd+S); persisted.
+    sidebar_visible: bool = true,
     /// A message for the banner above the list (a folder that couldn't be opened).
     notice: ?[]u8 = null,
     pending: std.ArrayList(Action) = .empty,
@@ -248,17 +277,30 @@ pub const Model = struct {
     waker: ?watch.Waker = null,
     /// The frame clock (seconds), copied from the context each pass: the palette's index ages by it.
     clock: f64 = 0,
+    /// The state file (`persist.zig`).
+    persist: persist.State = .{},
+    /// The mounted volumes, and what tells us they changed (`volumes.zig`; on the heap for the
+    /// system's notification callbacks).
+    volumes: ?volumes.Provider = null,
+    vol_signal: *volumes.Signal,
+    /// The native menu bar's link to the model (`menu_link.zig`): null callbacks in tests.
+    menu: menu_link.State = .{},
+    /// A text field had the keyboard in the last frame: file commands from the menu wait.
+    text_focus: bool = false,
 
     pub fn init(gpa: Allocator, cfg: Config) Allocator.Error!Model {
         const home = try normalize(gpa, cfg.home_path);
         errdefer gpa.free(home);
         var sb = try sidebar_model.Sidebar.init(gpa, home, cfg.favorites, cfg.pinned, cfg.locations);
         errdefer sb.deinit();
+        const signal = try gpa.create(volumes.Signal);
+        signal.* = .{};
+        errdefer gpa.destroy(signal);
         const start = try normalize(gpa, cfg.start_path);
         defer gpa.free(start);
         var pane = try Pane.init(gpa, start, .{ .show_hidden = cfg.show_hidden }, .{ .pane = 1, .tab = 2 });
         errdefer pane.deinit();
-        var m: Model = .{ .gpa = gpa, .home = home, .sidebar = sb, .show_hidden = cfg.show_hidden, .layout = .{ .leaf = pane.id }, .next_id = 3, .opener = cfg.opener, .ops = file_ops.FileOperationService.init(gpa), .clip = Clipboard.init(gpa), .hooks = cfg.hooks, .watch = watch.Watchers.init(gpa, cfg.watch) };
+        var m: Model = .{ .gpa = gpa, .home = home, .sidebar = sb, .show_hidden = cfg.show_hidden, .layout = .{ .leaf = pane.id }, .next_id = 3, .opener = cfg.opener, .ops = file_ops.FileOperationService.init(gpa), .clip = Clipboard.init(gpa), .hooks = cfg.hooks, .watch = watch.Watchers.init(gpa, cfg.watch), .volumes = cfg.volumes, .vol_signal = signal };
         errdefer m.ops.deinit();
         errdefer m.clip.deinit();
         errdefer m.watch.deinit();
@@ -267,6 +309,13 @@ pub const Model = struct {
         try m.panes.append(gpa, pane);
         errdefer m.panes.deinit(gpa);
         try m.view_state.palette.index.configure(gpa, cfg.index);
+        try sidebar_ops.refreshVolumes(&m);
+        m.persist.store = cfg.store;
+        errdefer m.persist.deinit(gpa);
+        if (cfg.store) |store| {
+            m.sidebar.io = store.io;
+            try persist.restore(&m);
+        }
         return m;
     }
 
@@ -287,6 +336,8 @@ pub const Model = struct {
         self.panes.deinit(self.gpa);
         self.layout.deinit(self.gpa);
         self.sizes.deinit(self.gpa);
+        self.persist.deinit(self.gpa);
+        self.gpa.destroy(self.vol_signal);
         self.sidebar.deinit();
         self.gpa.free(self.home);
         self.* = undefined;
@@ -339,6 +390,7 @@ pub const Model = struct {
     pub fn applyPending(self: *Model) Allocator.Error!bool {
         self.freeRetired();
         self.view_state.palette.freeRetired();
+        if (self.vol_signal.take()) try sidebar_ops.refreshVolumes(self); // a mount, an unmount, a rename
         try nav_ops.syncColumns(self); // the shown tabs of column-view panes match their folders
         var changed = try self.watch.refreshDirty(self); // folders that changed on disk
         defer self.watch.reconcile(self) catch {}; // watch what is drawn after this pass
@@ -383,9 +435,15 @@ pub const Model = struct {
             .drop_files => |d| try file_actions.drop(self, d),
             .apply_filter => |id| try filter_ops.apply(self, id),
             .palette_open => |o| try palette_exec.open(self, o),
+            .open_in_split => |p| try sidebar_ops.openInSplit(self, p),
+            .sidebar_remove => |id| sidebar_ops.remove(self, id),
+            .sidebar_add => |sa| try sidebar_ops.add(self, sa),
+            .sidebar_move => |mv| try self.sidebar.moveEntry(mv.id, mv.kind, mv.to),
+            .eject => |p| try sidebar_ops.eject(self, p),
         };
         rename.validate(self);
         changed = true;
+        persist.noteChange(self);
         return changed;
     }
 
@@ -464,6 +522,11 @@ pub const Model = struct {
         const msg = try std.fmt.allocPrint(self.gpa, "Can't open \"{s}\".", .{std.fs.path.basename(path)});
         self.clearNotice();
         self.notice = msg;
+    }
+
+    /// Writes the state file now if it differs (the app quitting).
+    pub fn flushState(self: *Model) void {
+        persist.flush(self);
     }
 
     pub fn setShowHidden(self: *Model, on: bool) Allocator.Error!void {

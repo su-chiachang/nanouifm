@@ -46,7 +46,18 @@ pub fn view(c: *ui.Context, m: *Model, index: usize, strip_x: f32, strip_w: f32)
     if (!c.input.down) m.view_state.tab_drag = null;
     const bar = ui.div(c).row().wFull().h(style.tab_strip_height).px(pad).gap(gap).itemsCenter().bg(th.background.mix(th.surface, 0.5));
     defer bar.end();
-    const tw = tabWidth(strip_w, pane.tabs.items.len);
+    // The first pane at the window's edge (sidebar hidden): room for the traffic lights, and the
+    // button that brings the sidebar back.
+    const lead = index == 0 and !m.sidebar_visible;
+    const sx = if (lead) strip_x + style.lead_extra else strip_x;
+    const sw = if (lead) strip_w - style.lead_extra else strip_w;
+    if (lead) {
+        ui.key(c, "lead-gap");
+        const gap_box = ui.div(c).w(style.lead_gap).h(1);
+        gap_box.end();
+        if (style.iconButton(c, "sidebar-show", "sidebar.left", true, false)) style.post(c, m, .{ .run_command = .view_sidebar });
+    }
+    const tw = tabWidth(sw, pane.tabs.items.len);
     for (pane.tabs.items, 0..) |*t, i| {
         const ref: model_mod.TabRef = .{ .pane = pane.id, .tab = t.id };
         ui.keyInt(c, t.id);
@@ -68,7 +79,7 @@ pub fn view(c: *ui.Context, m: *Model, index: usize, strip_x: f32, strip_w: f32)
             ui.icon(c, "xmark", .{ .size = 9, .weight = .bold, .color = th.muted });
             if (x.clicked()) style.post(c, m, .{ .close_tab = ref });
         }
-        press(c, m, it, ref, i, strip_x, strip_w, pane.tabs.items.len);
+        press(c, m, it, ref, i, sx, sw, pane.tabs.items.len);
     }
     if (style.iconButton(c, "new-tab", "plus", true, false)) {
         style.post(c, m, .{ .focus_pane = pane.id });

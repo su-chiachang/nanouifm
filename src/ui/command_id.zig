@@ -18,6 +18,7 @@ pub const Id = enum {
     file_reveal,
     file_copy_path,
     file_pin,
+    file_add_favorite,
     // Edit
     edit_undo,
     edit_redo,
@@ -38,6 +39,7 @@ pub const Id = enum {
     sort_descending,
     sort_folders_first,
     view_hidden,
+    view_sidebar,
     view_split_side,
     view_split_stacked,
     palette_show,

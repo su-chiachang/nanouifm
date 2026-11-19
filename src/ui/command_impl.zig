@@ -16,6 +16,7 @@ const nav_ops = @import("nav_ops.zig");
 const goto = @import("goto.zig");
 const filter_ops = @import("filter_ops.zig");
 const palette_ops = @import("palette_ops.zig");
+const sidebar_ops = @import("sidebar_ops.zig");
 const Pred = @import("command.zig").Pred;
 
 // ---- predicates ----
@@ -118,6 +119,10 @@ pub fn layoutIs(comptime preset: pane_layout.LayoutPreset) Pred {
     }.f;
 }
 
+pub fn sidebarTitle(m: *Model, _: []u8) []const u8 {
+    return if (m.sidebar_visible) "Hide Sidebar" else "Show Sidebar";
+}
+
 pub fn undoTitle(m: *Model, buf: []u8) []const u8 {
     const t = m.ops.undoTitle() orelse return "Undo";
     return std.fmt.bufPrint(buf, "Undo {s}", .{t}) catch "Undo";
@@ -168,6 +173,12 @@ pub fn copyPath(m: *Model) Allocator.Error!void {
 }
 pub fn pin(m: *Model) Allocator.Error!void {
     return file_actions.pin(m);
+}
+pub fn addFavorite(m: *Model) Allocator.Error!void {
+    return sidebar_ops.addFavorite(m);
+}
+pub fn toggleSidebar(m: *Model) Allocator.Error!void {
+    m.sidebar_visible = !m.sidebar_visible;
 }
 pub fn undo(m: *Model) Allocator.Error!void {
     return file_actions.undo(m);

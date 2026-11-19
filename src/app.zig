@@ -16,6 +16,9 @@ const goto = @import("ui/goto.zig");
 const context_menu = @import("ui/context_menu.zig");
 const drops = @import("ui/drops.zig");
 const palette_view = @import("ui/palette_view.zig");
+const persist = @import("ui/persist.zig");
+const sidebar_menu = @import("ui/sidebar_menu.zig");
+const sidebar_dnd = @import("ui/sidebar_dnd.zig");
 
 pub const State = model.Model;
 pub const Config = model.Config;
@@ -26,8 +29,16 @@ pub fn view(m: *State, c: *ui.Context) void {
     // nothing the previous pass handed to the frame is freed while this one builds.
     m.watch.setWaker(c.waker);
     m.view_state.palette.index.setWaker(c.waker);
+    m.vol_signal.waker = c.waker;
+    m.waker = c.waker;
     m.clock = c.time;
-    _ = m.applyPending() catch false;
+    m.text_focus = c.focus_is_text;
+    const applied = m.applyPending() catch false;
+    if (applied) m.menu.refresh(); // the menu bar follows what the actions changed
+    // With a menu bar its key equivalents take the command keys; while a text field has the
+    // keyboard they are held back so the field gets them (see ui/menu_link.zig).
+    if (m.menu.installed) ui.suspendMenuKeyEquivalents(c.focus_is_text);
+    persist.tick(m, c); // the debounced write of the state file
     c.title_bar_height = style.tab_strip_height;
     shortcuts(c, m);
     const root = ui.div(c).row().sizeFull().bg(c.theme.background);
@@ -35,8 +46,10 @@ pub fn view(m: *State, c: *ui.Context) void {
     panes_view.view(c, m);
     sidebar.view(c, m);
     context_menu.view(c, m); // over everything
+    sidebar_menu.view(c, m);
     goto.view(c, m);
     drops.ghost(c, m);
+    sidebar_dnd.ghost(c, m);
     palette_view.view(c, m); // over everything
 }
 

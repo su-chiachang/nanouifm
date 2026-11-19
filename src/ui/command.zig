@@ -26,6 +26,9 @@ pub const Command = struct {
     file_scope: bool = false,
     /// False for a second key of another command (Cmd+Down is Open's twin).
     in_palette: bool = true,
+    /// False for a second key of another command: the menu bar lists the command once, and the
+    /// twin's key stays with the view's dispatcher (see `menu_link.zig`).
+    in_menu: bool = true,
     /// Whether running it would do something right now; null: always.
     enabled: ?Pred = null,
     /// Whether its menu item carries a check mark; null: not a toggle.

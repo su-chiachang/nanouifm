@@ -61,7 +61,16 @@ src/ui/         model.zig (app state, Config, queued Actions), pane.zig, tab.zig
                 (open, requery, choose), palette_exec.zig (open folder/file here, new tab, split),
                 palette_index.zig (file index over `Config.index` roots + sidebar folders, crawled by an
                 injectable `Runner`: a thread in main.zig, a held or immediate one in tests),
-                palette_view.zig; tests.zig, tests_*.zig + test_support.zig (`ts.Env`, `ts.IndexMode`)
+                palette_view.zig; persistence: persist.zig (the core `StateStore` through `Config.store`: restore at
+                launch, 400 ms debounced save by the frame clock + `Context.frameIn`, flush at quit; the model
+                stays the owner), menus: menu_template.zig (THE menu bar as a pure function of the registry and
+                the model), menu_bar.zig (main.zig only: installs it with `App.setMenu`, syncs item state in
+                place), menu_link.zig (who owns a key, the menu or the view dispatcher: read its header);
+                sidebar: sidebar.zig (view), sidebar_model.zig, sidebar_ops.zig (remove, add, move, eject, volumes,
+                Add to Favorites), sidebar_menu.zig (context menu), sidebar_dnd.zig + drag_kind.zig (reorder and
+                add-by-drag over nanoui's in-window drag payloads), volumes.zig (injectable Locations provider +
+                `Signal`) + system_volumes.zig (main.zig only: NSFileManager/NSWorkspace);
+                tests.zig, tests_*.zig + test_support.zig (`ts.Env`, `ts.IndexMode`)
 src/core/       the UI-free core library (`zig build test-core`)
 ```
 

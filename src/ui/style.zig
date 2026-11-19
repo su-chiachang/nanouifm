@@ -44,9 +44,17 @@ pub fn post(c: *ui.Context, m: *model.Model, a: model.Action) void {
     c.changed = true;
 }
 
-/// Where the panes go in the window: everything right of the sidebar.
-pub fn panesBounds(w: f32, h: f32) pane_sizes.Rect {
-    return .{ .x = sidebar_width, .y = 0, .w = @max(0, w - sidebar_width), .h = h };
+/// While the sidebar is hidden the first pane's tab strip starts at the window's edge: it keeps
+/// `lead_gap` free for the traffic lights, then the sidebar toggle (30 wide), then the chips.
+pub const lead_gap: f32 = 78;
+/// What that takes beyond the strip's own padding (the toggle, and the row's gaps).
+pub const lead_extra: f32 = lead_gap + 30 + 4;
+
+/// Where the panes go in the window: everything right of the sidebar (all of it while the sidebar
+/// is hidden).
+pub fn panesBounds(w: f32, h: f32, sidebar_visible: bool) pane_sizes.Rect {
+    const left = if (sidebar_visible) sidebar_width else 0;
+    return .{ .x = left, .y = 0, .w = @max(0, w - left), .h = h };
 }
 
 /// Which of the list's columns a pane this wide has room for (Name takes the rest).

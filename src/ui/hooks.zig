@@ -4,6 +4,10 @@
 //! (The file opener is the same idea and lives in `opener.zig`.)
 const std = @import("std");
 
+/// The app-level chords a menu bar owns but a focused text field holds back (see `menu_link.zig`):
+/// the view runs them itself, through `Hooks.app_role`.
+pub const AppRole = enum { quit, hide, hide_others, minimize };
+
 pub const Hooks = struct {
     /// Puts copied files on the system pasteboard as file URLs (Copy), so Finder and other apps
     /// can paste them. The internal clipboard is what Paste uses; this only mirrors it.
@@ -21,6 +25,9 @@ pub const Hooks = struct {
     /// Whether Option is held right now (dropping from Finder: a copy). Tests use the
     /// tester's modifier state instead.
     option_held: ?*const fn () bool = null,
+    /// Quit, Hide, Hide Others and Minimize, the way the App and Window menus do them. Only needed
+    /// while a text field has the keyboard and the menu bar's key equivalents are held back.
+    app_role: ?*const fn (role: AppRole) void = null,
 
     pub fn freePaths(gpa: std.mem.Allocator, paths: [][]u8) void {
         for (paths) |p| gpa.free(p);

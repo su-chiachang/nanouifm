@@ -13,6 +13,7 @@ pub const hooks: Hooks = .{
     .read_files = readFiles,
     .change_count = nanoui.clipboard.changeCount,
     .option_held = optionHeld,
+    .app_role = appRole,
 };
 
 /// An NSArray of NSURLs for `paths`.
@@ -48,4 +49,19 @@ fn readFiles(gpa: std.mem.Allocator) ?[][]u8 {
 fn optionHeld() bool {
     const flags = objc.msg(objc.NSUInteger, objc.class("NSEvent"), "modifierFlags", .{});
     return flags & (1 << 19) != 0; // NSEventModifierFlagOption
+}
+
+/// Cmd+Q, Cmd+H, Cmd+Opt+H and Cmd+M while a text field has the keyboard (the menu bar's
+/// key equivalents are held back then): what the App and Window menus' items do.
+fn appRole(role: @import("hooks.zig").AppRole) void {
+    const pool = objc.Pool.push();
+    defer pool.pop();
+    const app = objc.msg(objc.Object, objc.class("NSApplication"), "sharedApplication", .{});
+    const none: ?objc.Object = null;
+    switch (role) {
+        .quit => objc.msg(void, app, "terminate:", .{none}),
+        .hide => objc.msg(void, app, "hide:", .{none}),
+        .hide_others => objc.msg(void, app, "hideOtherApplications:", .{none}),
+        .minimize => if (objc.msg(?objc.Object, app, "keyWindow", .{})) |w| objc.msg(void, w, "miniaturize:", .{none}),
+    }
 }

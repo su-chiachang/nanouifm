@@ -14,6 +14,7 @@ const Allocator = std.mem.Allocator;
 const Model = @import("model.zig").Model;
 const target = @import("file_target.zig");
 const style = @import("style.zig");
+const drag_kind = @import("drag_kind.zig");
 
 /// The absolute path a file URL names ("file:///Users/me/a%20b/" -> "/Users/me/a b"), in `a`;
 /// null for anything that isn't a file URL.
@@ -66,13 +67,20 @@ pub fn accept(c: *ui.Context, m: *Model, index: u32, dest: []const u8) void {
 pub fn land(c: *ui.Context, m: *Model, rect: ?ui.Rect, dest: []const u8) bool {
     const r = rect orelse return false;
     const over = ui.dragOver(c, r) != null and m.view_state.file_drag != null;
-    const src_id = ui.dropTarget(c, r) orelse return over;
-    const si = m.paneIndex(@intCast(src_id)) orelse return false;
-    const paths = target.selectedPaths(c.alloc(), &m.panes.items[si]) catch return false;
-    for (paths) |p| if (std.mem.eql(u8, p, dest)) return false;
-    if (paths.len == 0) return false;
-    style.post(c, m, .{ .drop_files = .{ .paths = paths, .dest = dest, .copy = wantsCopy(c, m) } });
+    const payload = ui.dropTarget(c, r) orelse return over;
+    dropFiles(c, m, payload, dest);
     return false;
+}
+
+/// A drop that was taken (`ui.dropTarget`): when it is a pane's rows, the ones selected there go
+/// into `dest`. A sidebar entry's drag (`drag_kind`) is not files and does nothing here.
+pub fn dropFiles(c: *ui.Context, m: *Model, payload: u64, dest: []const u8) void {
+    const src_id = drag_kind.asPane(payload) orelse return;
+    const si = m.paneIndex(src_id) orelse return;
+    const paths = target.selectedPaths(c.alloc(), &m.panes.items[si]) catch return;
+    for (paths) |p| if (std.mem.eql(u8, p, dest)) return;
+    if (paths.len == 0) return;
+    style.post(c, m, .{ .drop_files = .{ .paths = paths, .dest = dest, .copy = wantsCopy(c, m) } });
 }
 
 /// The drag's label beside the pointer, while rows are dragged (called once, last).

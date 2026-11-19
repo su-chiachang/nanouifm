@@ -360,6 +360,10 @@ pub const Env = struct {
         files: []const []const u8 = &.{},
         index: IndexMode = .off,
         index_rel: []const u8 = "",
+        /// The mounted volumes (`volumes.zig`): a test's fake provider; none: the one fixed volume.
+        volumes: ?@import("volumes.zig").Provider = null,
+        /// A second favorite, titled "Fav2" (under the root).
+        favorite2: ?[]const u8 = null,
     }) !void {
         env.fx = try Fixture.init();
         errdefer env.fx.deinit();
@@ -369,12 +373,25 @@ pub const Env = struct {
         defer if (fav_path) |p| testing.allocator.free(p);
         const index_root = try env.fx.sub(o.index_rel);
         defer testing.allocator.free(index_root);
+        const fav2_path = if (o.favorite2) |f| try env.fx.sub(f) else null;
+        defer if (fav2_path) |p| testing.allocator.free(p);
+        var favs: [2]app_view.Item = undefined;
+        var nfavs: usize = 0;
+        if (fav_path) |p| {
+            favs[nfavs] = .{ .path = p, .title = "Fav" };
+            nfavs += 1;
+        }
+        if (fav2_path) |p| {
+            favs[nfavs] = .{ .path = p, .title = "Fav2" };
+            nfavs += 1;
+        }
         held_job = null;
         env.m = try app_view.State.init(testing.allocator, .{
             .start_path = env.fx.root,
             .home_path = env.fx.root,
-            .favorites = if (fav_path) |p| &.{.{ .path = p, .title = "Fav" }} else &.{},
+            .favorites = favs[0..nfavs],
             .locations = &.{.{ .path = "/", .title = "Volume" }},
+            .volumes = o.volumes,
             .opener = record,
             .hooks = test_hooks,
             .watch = o.watch,

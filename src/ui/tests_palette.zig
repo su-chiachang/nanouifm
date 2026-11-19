@@ -230,7 +230,7 @@ test "typing finds files and folders of the index, with their folder abbreviated
     typeQuery(&env, "fav");
     try testing.expectEqualStrings("Favorites & Pinned", rows(&env)[0].title);
     try testing.expectEqualStrings("Fav", rows(&env)[1].title);
-    typeQuery(&env, "ot"); // "favot" matches nothing
+    typeQuery(&env, "zq"); // "favzq" matches nothing (not even Add to Favorites)
     try testing.expectEqual(@as(usize, 0), rows(&env).len);
     // A folder is a hit too.
     clearQuery(&env);

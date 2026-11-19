@@ -80,8 +80,23 @@ without `--nanoui-snapshot` (no window appears; nothing is written outside `$sd`
   `state.json` after opening a tab, and restoring the tabs on the next launch.
 - **Launched once with a visible window** (user-approved, no input sent, temp state folder): the bundled app stayed up
   for 10 s with no error output, idled at 0.0% CPU (about 108 MB), and exited cleanly on SIGTERM.
-- **Not verified in a running app** (compiled and wired, but they need a visible window or real user input): the real
-  Quick Look panel, the share sheet, the real window resize (`system_window.zig`), the NSWorkspace app list and launch
+- **Quick Look panel, verified in the hidden snapshot run** (temp state folder with a 6-byte `hello-ql.txt` and a 16x16
+  `tiny.png`, temporary stderr diagnostics, since removed). Script (Space is not a menu accelerator, so `chord:space`
+  reaches the view; `chord:cmd+k` and `chord:cmd+y` do NOT, the menu bar owns them, so the palette cannot be opened
+  that way; `rclick:` does not open the in-view context menu either):
+  `NANOFM_STATE_DIR=$sd zig-out/bin/nanofm --nanoui-snapshot=$sd/o.png '--nanoui-script=live:2;click:hello-ql.txt;chord:space;live:5;chord:down;live:3' --nanoui-wait=0`.
+  Observed: the command ran with the hook installed and 1 path; the shared `QLPreviewPanel` was obtained; the data
+  source and delegate were set; QL called `numberOfPreviewItems` and `previewItemAtIndex:0` (an NSURL); after
+  `makeKeyAndOrderFront:` the panel was `isVisible` with `dataSource` set, 1 item, index 0, a current preview item, and
+  `sharedPreviewPanelExists`. A read-only CoreGraphics window list (owner nanofm/QuickLook) during the run showed one
+  on-screen window, `owner=nanofm layer=9 w=816 h=849` (the text preview). `chord:down` moved the selection to
+  `tiny.png`: `sync` called the hook's `update` once with that path, QL asked for the item again, and the window became
+  `w=370 h=223` (the image preview). No error output; the panel went away with the process. Not provable there: the hidden
+  process is not the active app (`NSApp isActive` false, the panel is not key, `currentController` is nil, and
+  `activateIgnoringOtherApps:` has no effect), so key handling (`previewPanel:handleEvent:` for arrows pressed while the
+  panel is key), Escape / close button and whether QL keeps a directly set data source once the panel becomes key in a
+  really active app still need a person.
+- **Not verified in a running app** (compiled and wired, but they need a visible window or real user input): the share sheet, the real window resize (`system_window.zig`), the NSWorkspace app list and launch
   (`system_open_with.zig`), native menu-bar key handling (including Cmd+W/T/D and Ctrl+Cmd+S, which the hidden run
   does not deliver to the menu bar), and volume mount/unmount notifications (the volume list at launch is verified).
 - Dragging items out of nanofm to Finder is not possible: nanoui's drag source writes plain text only. Dragging between

@@ -231,6 +231,57 @@ test "several items: how many and how much; folders are said not to be counted" 
     try testing.expect(try inPanel(&env, "folders not counted"));
 }
 
+/// The horizontal centre of the panel's content (its left edge is a 1-point hairline).
+fn panelCenter(env: *ts.Env) !f32 {
+    const p = try panel(env);
+    return p.x + 1 + (p.w - 1) / 2;
+}
+
+fn expectCentred(env: *ts.Env, s: []const u8) !void {
+    const r = ts.findTextIn(&env.t, try panel(env), s) orelse return error.TextNotFound;
+    const p = try panel(env);
+    try testing.expect(r.x >= p.x and r.x + r.w <= p.x + p.w); // inside the panel
+    try testing.expectApproxEqAbs(try panelCenter(env), r.x + r.w / 2, 1.5);
+}
+
+test "several items: the title, the total and the note are all centred in the panel, wide or narrow" {
+    var env: ts.Env = undefined;
+    try env.init();
+    defer env.deinit();
+    try inspectorOn(&env);
+    try env.click("a.txt");
+    try ts.press(&env.t, 'a', .{ .cmd = true }); // a.txt, b.txt, dir
+    try expectCentred(&env, "3 items");
+    try expectCentred(&env, "30 bytes total");
+    try expectCentred(&env, "folders not counted");
+    // The icon above them is on the same axis.
+    const icon = ts.iconRectBelow(&env.t, "square.stack.3d.up", 0) orelse return error.IconNotFound;
+    try testing.expectApproxEqAbs(try panelCenter(&env), icon.x + icon.w / 2, 1.5);
+    // A four-column layout leaves each pane's panel at its narrowest.
+    try env.m.queue(.{ .apply_preset = .four_columns });
+    env.t.settle(0.3);
+    const last = env.m.panes.items.len - 1;
+    env.m.panes.items[last].inspector = true;
+    env.m.focused = last;
+    try ts.press(&env.t, 'a', .{ .cmd = true });
+    const r = try ts.paneRect(&env.t, &env.m, last);
+    const w = inspector_info.panelWidth(r.w);
+    try testing.expect(w < 200);
+    const p: Rect = .{ .x = r.x + r.w - w, .y = r.y, .w = w, .h = r.h };
+    for ([_][]const u8{ "items", "total" }) |part| {
+        var found = false;
+        for (env.t.ctx.nodes.items) |n| switch (n.content) {
+            .text => |tx| if (std.mem.indexOf(u8, tx.str, part) != null and p.contains(n.rect.x + n.rect.w / 2, n.rect.y + n.rect.h / 2)) {
+                found = true;
+                try testing.expectApproxEqAbs(p.x + 1 + (p.w - 1) / 2, n.rect.x + n.rect.w / 2, 1.5);
+                try testing.expect(n.rect.x >= p.x and n.rect.x + n.rect.w <= p.x + p.w);
+            },
+            else => {},
+        };
+        try testing.expect(found);
+    }
+}
+
 // ---- the thumbnail ----
 
 test "the preview is the file's icon until a thumbnail arrives, then the thumbnail; never asked twice" {

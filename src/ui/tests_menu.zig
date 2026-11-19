@@ -54,15 +54,17 @@ test "every command the registry lists in the menu appears exactly once" {
     walk(bar, &counts);
     for (&commands.all) |*c| try testing.expectEqual(@as(u8, if (c.in_menu) 1 else 0), counts[@backingInt(c.id)]);
     // The commands left out are the second keys (Open's Cmd+Down, Quick Look's Space) and Share,
-    // which the inspector, the palette and the context menu have.
+    // which the inspector, the palette and the context menu have, and the context menu's
+    // "Open With <App>" rows, which only that menu has.
     var left_out: usize = 0;
     for (&commands.all) |*c| {
         if (!c.in_menu) {
             left_out += 1;
-            try testing.expect(c.id == .file_open_down or c.id == .file_quick_look_space or c.id == .file_share);
+            const row = @backingInt(c.id) >= @backingInt(commands.Id.file_open_with_0) and @backingInt(c.id) <= @backingInt(commands.Id.file_open_with_7);
+            try testing.expect(row or c.id == .file_open_down or c.id == .file_quick_look_space or c.id == .file_share);
         }
     }
-    try testing.expectEqual(@as(usize, 3), left_out);
+    try testing.expectEqual(@as(usize, 3 + 8), left_out);
     // The bar: the App role, then File, Edit, View, Go, and the Window role.
     try testing.expectEqual(@as(usize, 6), bar.len);
     try testing.expect(bar[0].role.? == .app_menu and bar[5].role.? == .window_menu);

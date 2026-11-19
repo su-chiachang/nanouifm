@@ -23,6 +23,39 @@ pub const QuickLook = struct {
     is_open: *const fn () bool,
 };
 
+/// A window's frame in points with the origin at the screen's top left and y down (nanoui's
+/// `Window.frame` convention). `window_growth.zig` converts to the core's bottom-left origin.
+pub const Frame = struct { x: f64, y: f64, w: f64, h: f64 };
+
+/// The window itself (`system_window.zig`), for growing it when a layout needs room. Tests install
+/// a recorder over a fake frame; none: the window is never resized.
+pub const WindowFrame = struct {
+    /// The window's frame now (null: unknown, nothing is done).
+    get: *const fn () ?Frame,
+    /// Makes this the window's frame. Called from `Model.applyPending`; the real one defers the
+    /// resize to the next turn of the main loop rather than resizing under a running frame.
+    set: *const fn (Frame) void,
+    /// The visible frame of the window's screen (menu bar and Dock left out): the limit.
+    visible: *const fn () ?Frame,
+};
+
+/// An app that can open a file (`OpenWith`).
+pub const OpenApp = struct {
+    /// "Preview" (the bundle's display name, without ".app").
+    name: []const u8,
+    /// The app bundle's absolute path.
+    path: []const u8,
+};
+
+/// The context menu's "Open With" rows (`system_open_with.zig`).
+pub const OpenWith = struct {
+    /// The apps that can open `file`, the default app first (the caller keeps the first few). The
+    /// result and every string in it are allocated with `gpa` (free with `Hooks.freeApps`).
+    list: *const fn (gpa: std.mem.Allocator, file: []const u8) std.mem.Allocator.Error![]OpenApp,
+    /// Opens `file` with the app at `app_path`; false if that failed.
+    open: *const fn (app_path: []const u8, file: []const u8) bool,
+};
+
 pub const Hooks = struct {
     /// Puts copied files on the system pasteboard as file URLs (Copy), so Finder and other apps
     /// can paste them. The internal clipboard is what Paste uses; this only mirrors it.
@@ -54,6 +87,19 @@ pub const Hooks = struct {
     /// A picture's size in pixels for the inspector's Resolution row: by default its header is
     /// read from the file (a PNG, JPEG or GIF).
     image_size: image_info.ReadFn = image_info.fromFile,
+
+    /// The window's frame, for growing it with a layout. Null: the window is left alone.
+    window_frame: ?WindowFrame = null,
+    /// Apps that can open a file, and opening with one. Null: no "Open With <App>" rows.
+    open_with: ?OpenWith = null,
+
+    pub fn freeApps(gpa: std.mem.Allocator, apps: []OpenApp) void {
+        for (apps) |a| {
+            gpa.free(a.name);
+            gpa.free(a.path);
+        }
+        gpa.free(apps);
+    }
 
     pub fn freePaths(gpa: std.mem.Allocator, paths: [][]u8) void {
         for (paths) |p| gpa.free(p);

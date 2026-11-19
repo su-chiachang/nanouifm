@@ -36,6 +36,7 @@ pub fn view(m: *State, c: *ui.Context) void {
     m.waker = c.waker;
     m.clock = c.time;
     m.text_focus = c.focus_is_text;
+    m.growth.size = .{ .w = c.size.w, .h = c.size.h };
     const applied = m.applyPending() catch false;
     if (applied) m.menu.refresh(); // the menu bar follows what the actions changed
     quick_look.sync(m); // an open Quick Look panel follows the selection

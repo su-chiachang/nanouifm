@@ -8,6 +8,8 @@ const Hooks = @import("hooks.zig").Hooks;
 const system_quick_look = @import("system_quick_look.zig");
 const system_thumbs = @import("system_thumbs.zig");
 const system_share = @import("system_share.zig");
+const system_window = @import("system_window.zig");
+const system_open_with = @import("system_open_with.zig");
 
 pub const hooks: Hooks = .{
     .copy_files = copyFiles,
@@ -20,6 +22,8 @@ pub const hooks: Hooks = .{
     .quick_look = system_quick_look.hook,
     .share = system_share.share,
     .thumbnail = system_thumbs.provider,
+    .window_frame = system_window.hook,
+    .open_with = system_open_with.hook,
 };
 
 /// An NSArray of NSURLs for `paths`.

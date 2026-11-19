@@ -39,13 +39,25 @@ pub fn view(c: *ui.Context, m: *Model, pane: *Pane, w: f32) void {
     }
 }
 
+/// The panel's message: an icon and up to three lines, all centred under it. Each line sits in a
+/// full-width, clipped row that centres it and cuts it with an ellipsis when the panel is too
+/// narrow, so a long line never pushes the others off-centre.
 fn placeholder(c: *ui.Context, symbol: []const u8, title: []const u8, sub: ?[]const u8, note: ?[]const u8) void {
     const th = c.theme;
     ui.key(c, "placeholder");
     const box = ui.div(c).column().sizeFull().center().gap(8).p(16);
     defer box.end();
     ui.icon(c, symbol, .{ .size = 28, .color = th.muted.alpha(0.7) });
-    ui.text(c, title, .{ .size = 14, .weight = .medium, .color = if (sub == null) th.muted else th.text });
-    if (sub) |s| ui.text(c, s, .{ .size = 12, .color = th.muted });
-    if (note) |s| ui.text(c, s, .{ .size = 11.5, .color = th.muted.alpha(0.8) });
+    centred(c, "title", title, .{ .size = 14, .weight = .medium, .color = if (sub == null) th.muted else th.text });
+    if (sub) |s| centred(c, "sub", s, .{ .size = 12, .color = th.muted });
+    if (note) |s| centred(c, "note", s, .{ .size = 11.5, .color = th.muted.alpha(0.8) });
+}
+
+fn centred(c: *ui.Context, key: []const u8, str: []const u8, style: ui.TextStyle) void {
+    ui.key(c, key);
+    const row = ui.div(c).row().wFull().minW(0).justifyCenter().clip();
+    defer row.end();
+    var s = style;
+    s.truncate = .ellipsis;
+    ui.text(c, str, s);
 }

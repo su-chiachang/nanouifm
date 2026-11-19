@@ -19,6 +19,7 @@ const palette_ops = @import("palette_ops.zig");
 const sidebar_ops = @import("sidebar_ops.zig");
 const quick_look = @import("quick_look.zig");
 const inspector_ops = @import("inspector_ops.zig");
+const open_with = @import("open_with.zig");
 const Pred = @import("command.zig").Pred;
 
 // ---- predicates ----
@@ -251,6 +252,22 @@ pub fn splitSide(m: *Model) Allocator.Error!void {
 pub fn splitStacked(m: *Model) Allocator.Error!void {
     return layout_ops.split(m, .stacked);
 }
+pub fn canOpenWith(comptime n: usize) Pred {
+    return struct {
+        fn f(m: *Model) bool {
+            return open_with.canOpen(m, n);
+        }
+    }.f;
+}
+
+pub fn openWith(comptime n: usize) *const fn (*Model) Allocator.Error!void {
+    return struct {
+        fn f(m: *Model) Allocator.Error!void {
+            return open_with.openWith(m, n);
+        }
+    }.f;
+}
+
 pub fn layout(comptime preset: pane_layout.LayoutPreset) *const fn (*Model) Allocator.Error!void {
     return struct {
         fn f(m: *Model) Allocator.Error!void {

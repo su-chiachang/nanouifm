@@ -86,6 +86,9 @@ src/ui/         model.zig (app state, Config, queued Actions), pane.zig, tab.zig
                 runner is configured: `Tab.visit/back/forward/reload/setExpanded` and the column ops then REQUEST and return;
                 file operations (`file_refresh.folders`) still read inline. Tests: `ts.ListingMode` (`.held` keeps jobs until
                 `ts.releaseListing`), tests_async.zig;
+                window_growth.zig (the window grows after a split or preset: `Hooks.window_frame`, system_window.zig, tests_growth.zig),
+                open_with.zig (context menu "Open With <App>" rows over `Hooks.open_with`, system_open_with.zig, commands
+                `file_open_with_0..7`, tests_open_with.zig);
                 tests.zig, tests_*.zig + test_support.zig (`ts.Env`, `ts.IndexMode`, `ts.ListingMode`)
 src/core/       the UI-free core library (`zig build test-core`)
 ```

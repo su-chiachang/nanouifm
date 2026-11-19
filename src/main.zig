@@ -10,6 +10,7 @@ const opener = @import("ui/opener.zig");
 const system_hooks = @import("ui/system_hooks.zig");
 const system_quick_look = @import("ui/system_quick_look.zig");
 const system_listing = @import("ui/system_listing.zig");
+const system_window = @import("ui/system_window.zig");
 
 pub const panic = nanoui.panic;
 pub const std_options = nanoui.std_options;
@@ -81,7 +82,7 @@ fn run(init: nanoui.Init) !void {
     app.options.on_terminate = onTerminate;
     app.options.on_active = onActive;
 
-    _ = try app.newWindow(.{
+    const window = try app.newWindow(.{
         .title = "Nanofm",
         .width = 1000,
         .height = 640,
@@ -90,6 +91,7 @@ fn run(init: nanoui.Init) !void {
         .title_bar = .hidden,
         .content = .{ .view = .init(&state, app_view.view) },
     });
+    system_window.attach(window); // layout changes grow this window (Hooks.window_frame)
     try app.run();
     state.flushState();
 }

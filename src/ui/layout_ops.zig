@@ -50,6 +50,7 @@ fn adopt(m: *Model, new_tree: *Tree, fresh: []const Pane, focus_id: u32) Allocat
     m.sizes.deinit(gpa);
     m.sizes = sizes;
     m.focused = std.mem.indexOfScalar(u32, leaves, focus_id) orelse 0;
+    m.growth.want = true; // `Model.applyPending` grows the window if the new layout is cramped
 }
 
 /// A new pane in `folder` with `like`'s sort order and view mode.

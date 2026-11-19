@@ -131,3 +131,36 @@ test "snapshot: inline rename with the invalid-name banner" {
     defer testing.allocator.free(p);
     try t.screenshot(p);
 }
+
+fn fakeApps(gpa: std.mem.Allocator, file: []const u8) std.mem.Allocator.Error![]@import("hooks.zig").OpenApp {
+    _ = file;
+    const names = [_][]const u8{ "TextEdit", "Visual Studio Code", "Xcode", "Sublime Text" };
+    const out = try gpa.alloc(@import("hooks.zig").OpenApp, names.len);
+    for (names, out) |n, *o| o.* = .{ .name = try gpa.dupe(u8, n), .path = try std.fmt.allocPrint(gpa, "/Applications/{s}.app", .{n}) };
+    return out;
+}
+
+fn fakeOpenApp(app: []const u8, file: []const u8) bool {
+    _ = app;
+    _ = file;
+    return true;
+}
+
+test "snapshot: the item menu of a file with its Open With rows" {
+    const out = std.c.getenv("NANOFM_SNAPSHOT_PNG") orelse return error.SkipZigTest;
+    var fx = try ts.Fixture.init();
+    defer fx.deinit();
+    try build(&fx);
+    var m = try model(&fx);
+    defer m.deinit();
+    m.hooks.open_with = .{ .list = fakeApps, .open = fakeOpenApp };
+
+    var t: ui.Tester = undefined;
+    try t.init(testing.allocator, .init(&m, app_view.view), .{ .width = 1000, .height = 760 });
+    defer t.deinit();
+    t.settle(0.3);
+    try rightClick(&t, "notes.txt");
+    const p = try path(std.mem.span(out), "context.openwith");
+    defer testing.allocator.free(p);
+    try t.screenshot(p);
+}

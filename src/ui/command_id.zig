@@ -22,6 +22,15 @@ pub const Id = enum {
     file_copy_path,
     file_pin,
     file_add_favorite,
+    /// The context menu's "Open With <App>" rows: the n-th app for the selected file (`open_with.zig`).
+    file_open_with_0,
+    file_open_with_1,
+    file_open_with_2,
+    file_open_with_3,
+    file_open_with_4,
+    file_open_with_5,
+    file_open_with_6,
+    file_open_with_7,
     // Edit
     edit_undo,
     edit_redo,

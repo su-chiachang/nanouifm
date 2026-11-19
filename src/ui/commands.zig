@@ -18,6 +18,7 @@ const Model = @import("model.zig").Model;
 const command = @import("command.zig");
 const impl = @import("command_impl.zig");
 const pane_layout = @import("../core/pane_layout.zig");
+const open_with = @import("open_with.zig");
 
 pub const Command = command.Command;
 pub const Id = command.Id;
@@ -104,9 +105,27 @@ fn layoutCommands() [preset_count]Command {
     return out;
 }
 
+/// `file_open_with_0` ... `_7`: the context menu's app rows. They only run from there, so the menu
+/// bar and the palette do not list them (the row's wording comes from the app, not the table).
+fn openWithCommands() [open_with.max_apps]Command {
+    var out: [open_with.max_apps]Command = undefined;
+    for (&out, 0..) |*c, i| c.* = .{
+        .id = @field(Id, "file_open_with_" ++ [1]u8{'0' + @as(u8, @intCast(i))}),
+        .title = "Open With",
+        .category = .file,
+        .symbol = "app",
+        .file_scope = true,
+        .in_palette = false,
+        .in_menu = false,
+        .enabled = impl.canOpenWith(i),
+        .run = impl.openWith(i),
+    };
+    return out;
+}
+
 /// Every command, grouped by menu (File, Edit, View, Go, Window); within View: modes, sorting,
 /// hidden files, splits, then the layouts.
-pub const all = static ++ layoutCommands() ++ go;
+pub const all = static ++ openWithCommands() ++ layoutCommands() ++ go;
 
 /// The command with this id.
 pub fn find(id: Id) *const Command {

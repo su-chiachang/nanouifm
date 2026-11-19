@@ -56,6 +56,8 @@ const preview_state = @import("preview_state.zig");
 const listing_loader = @import("listing_loader.zig");
 const listing_runner = @import("listing_runner.zig");
 const listing_apply = @import("listing_apply.zig");
+const window_growth = @import("window_growth.zig");
+const open_with = @import("open_with.zig");
 
 pub const Item = sidebar_model.Item;
 pub const LayoutTree = pane_sizes.Tree;
@@ -301,6 +303,10 @@ pub const Model = struct {
     /// Asks for folders to be read and takes the answers (`listing_loader.zig`); on the heap so
     /// the tabs' options can point at it.
     loader: *listing_loader.Loader,
+    /// Window growth after layout changes (`window_growth.zig`) and the apps the context menu
+    /// offers for a file (`open_with.zig`).
+    growth: window_growth.State = .{},
+    open_with: open_with.State = .{},
 
     pub fn init(gpa: Allocator, cfg: Config) Allocator.Error!Model {
         const home = try normalize(gpa, cfg.home_path);
@@ -357,6 +363,7 @@ pub const Model = struct {
         self.persist.deinit(self.gpa);
         self.preview.deinit(self.gpa);
         self.loader.destroy();
+        self.open_with.deinit(self.gpa);
         self.gpa.destroy(self.vol_signal);
         self.sidebar.deinit();
         self.gpa.free(self.home);
@@ -414,6 +421,7 @@ pub const Model = struct {
         self.view_state.palette.freeRetired();
         _ = self.preview.thumbs.merge(); // thumbnails that arrived since the last pass
         var changed = try listing_apply.drain(self); // folders read off the main thread
+        if (try open_with.service(self)) changed = true; // the apps asked for when the context menu opened
         if (self.vol_signal.take()) try sidebar_ops.refreshVolumes(self); // a mount, an unmount, a rename
         try nav_ops.syncColumns(self); // the shown tabs of column-view panes match their folders
         if (try self.watch.refreshDirty(self)) changed = true; // folders that changed on disk
@@ -467,6 +475,7 @@ pub const Model = struct {
             .eject => |p| try sidebar_ops.eject(self, p),
         };
         rename.validate(self);
+        window_growth.apply(self); // a split or a preset may need a bigger window
         changed = true;
         persist.noteChange(self);
         return changed;

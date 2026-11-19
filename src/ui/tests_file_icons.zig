@@ -9,6 +9,7 @@ const nanoui = @import("nanoui");
 const ui = nanoui.ui;
 const lister = @import("../core/lister.zig");
 const file_icons = @import("file_icons.zig");
+const thumbs = @import("thumbs.zig");
 const row_icon = @import("row_icon.zig");
 const ts = @import("test_support.zig");
 
@@ -367,4 +368,83 @@ test "the path bar: the home crumb has its own icon, every other crumb is a plai
     try testing.expectEqual(@as(usize, 2), imagesOf(&env, 14)); // home > dir
     try testing.expectEqual(@as(usize, 1), timesAsked(.folder, "")); // the rows' folder key, shared
     try testing.expectEqual(@as(usize, 1), timesAsked(.path, env.fx.root));
+}
+
+// ---- the inspector with BOTH providers (the real app has both) ----
+
+var thumb_done: ?thumbs.Done = null;
+var thumb_asked: usize = 0;
+
+fn holdThumb(path: []const u8, side: u32, done: thumbs.Done) void {
+    _ = path;
+    _ = side;
+    thumb_asked += 1;
+    thumb_done = done;
+}
+
+/// The pictures this frame draws that are neither a row's or crumb's icon nor the large icon: the
+/// thumbnail (its width is the panel's, so only "bigger than the 64 point icon" is stable).
+fn thumbnails(env: *ts.Env) usize {
+    var n: usize = 0;
+    for (env.t.ctx.nodes.items) |nd| switch (nd.content) {
+        .image => if (nd.rect.w > 64) {
+            n += 1;
+        },
+        else => {},
+    };
+    return n;
+}
+
+test "the inspector asks for the thumbnail AND the large icon at once, even with every row icon still out" {
+    var env: ts.Env = undefined;
+    try hooked(&env, &.{});
+    defer finish(&env);
+    thumb_done = null;
+    thumb_asked = 0;
+    env.m.hooks.thumbnail = holdThumb;
+    // Nothing has been answered: the rows' requests are all still out, as at a cold start.
+    try testing.expect(heldCount() > 0);
+    try ts.press(&env.t, 'i', .{ .cmd = true, .alt = true });
+    try env.click("a.txt");
+    env.t.settle(0.3);
+    try testing.expectEqual(@as(usize, 1), thumb_asked); // the thumbnail is not behind the icon cap
+    // The large icon may wait for a slot, but it is asked as soon as the rows' answers free them.
+    drain(&env);
+    var large = false;
+    for (held[0..asked]) |h| if (h.side == file_icons.large_side and h.kind == .ext) {
+        large = true;
+    };
+    try testing.expect(large);
+    // The thumbnail is still pending: Finder's icon is the preview (an image of 64 points, no symbol).
+    try testing.expectEqual(@as(usize, 1), imagesOf(&env, 64));
+    try testing.expectEqual(@as(usize, 0), thumbnails(&env));
+
+    // It arrives (400 x 300 pixels: bigger than the 64 point icon) and replaces the icon.
+    var px: [400 * 300 * 4]u8 = @splat(200);
+    thumb_done.?.finish(.{ .bgra = &px, .width = 400, .height = 300 });
+    thumb_done = null;
+    env.t.settle(0.3);
+    try testing.expectEqual(@as(usize, 1), thumbnails(&env));
+    try testing.expectEqual(@as(usize, 0), imagesOf(&env, 64));
+    try testing.expectEqual(@as(usize, 1), thumb_asked);
+}
+
+test "a failed thumbnail leaves Finder's large icon, which is never asked twice" {
+    var env: ts.Env = undefined;
+    try hooked(&env, &.{});
+    defer finish(&env);
+    thumb_done = null;
+    thumb_asked = 0;
+    env.m.hooks.thumbnail = holdThumb;
+    try ts.press(&env.t, 'i', .{ .cmd = true, .alt = true });
+    try env.click("a.txt");
+    drain(&env);
+    thumb_done.?.finish(null);
+    thumb_done = null;
+    env.t.settle(0.3);
+    try testing.expectEqual(@as(usize, 1), imagesOf(&env, 64));
+    const n = asked;
+    env.t.advance(1);
+    try testing.expectEqual(n, asked);
+    try testing.expectEqual(@as(usize, 1), thumb_asked);
 }

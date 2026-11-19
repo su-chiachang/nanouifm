@@ -74,10 +74,14 @@ without `--nanoui-snapshot` (no window appears; nothing is written outside `$sd`
 
 ## Known gaps
 
-- **Not verified in a running app** (compiled and wired, but tests cannot show a window): the real Quick Look panel,
-  the share sheet, the real window resize (`system_window.zig`) and the NSWorkspace app list and launch
-  (`system_open_with.zig`), native menu-bar key handling, volume mount notifications, the real file watcher, and the
-  worker-thread listing runner (`system_listing.zig`; the held and immediate runners are tested).
+- **Verified in the bundled app's hidden snapshot run** (`--nanoui-snapshot` with `live:SECONDS`, temp state folder):
+  real file icons, real QuickLook thumbnails and 128 px icons in the inspector, the real file watcher refreshing a
+  folder when a file is created from outside, the worker-thread listing runner doing that reload, saving state to
+  `state.json` after opening a tab, and restoring the tabs on the next launch.
+- **Not verified in a running app** (compiled and wired, but they need a visible window or real user input): the real
+  Quick Look panel, the share sheet, the real window resize (`system_window.zig`), the NSWorkspace app list and launch
+  (`system_open_with.zig`), native menu-bar key handling (including Cmd+W/T/D and Ctrl+Cmd+S, which the hidden run
+  does not deliver to the menu bar), and volume mount/unmount notifications (the volume list at launch is verified).
 - Dragging items out of nanofm to Finder is not possible: nanoui's drag source writes plain text only. Dragging between
   panes and dropping files in from Finder work.
 - Folder reads run on worker threads (navigation, back/forward, reload, columns, folders opened in place, new tabs and

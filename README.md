@@ -96,9 +96,51 @@ without `--nanoui-snapshot` (no window appears; nothing is written outside `$sd`
   `activateIgnoringOtherApps:` has no effect), so key handling (`previewPanel:handleEvent:` for arrows pressed while the
   panel is key), Escape / close button and whether QL keeps a directly set data source once the panel becomes key in a
   really active app still need a person.
-- **Not verified in a running app** (compiled and wired, but they need a visible window or real user input): the share sheet, the real window resize (`system_window.zig`), the NSWorkspace app list and launch
-  (`system_open_with.zig`), native menu-bar key handling (including Cmd+W/T/D and Ctrl+Cmd+S, which the hidden run
-  does not deliver to the menu bar), and volume mount/unmount notifications (the volume list at launch is verified).
+- **Menu-bar key handling, window growth and Open With, verified in the hidden snapshot run** (temp state folder with
+  `hello.txt`, `b.txt`, a 16x16 `tiny.png` and a one-pane `state.json`; temporary stderr diagnostics driven from a
+  wrapper around the view in main.zig, since removed). The recipe: after the first frames, in-process, walk
+  `[NSApp mainMenu]` (`numberOfItems`/`itemAtIndex:`/`keyEquivalent`/`keyEquivalentModifierMask`/`isEnabled`) and call
+  `[[NSApp mainMenu] performKeyEquivalent:event]` with an NSEvent that is never posted to the OS. Build the event from
+  `CGEventCreateKeyboardEvent` + `CGEventSetFlags` + `+[NSEvent eventWithCGEvent:]` (a CG-backed event with the
+  characters AppKit really computes: Shift+Cmd+D has `charactersIgnoringModifiers` = "D"; the hand-built
+  `keyEventWithType:...` with "D" does NOT match a menu key "d", the CG-backed one does) and log the BOOL and the model
+  (panes, tabs, sidebar, palette, window frame) each frame. Observed, run as
+  `NANOFM_STATE_DIR=$sd zig-out/bin/nanofm --nanoui-snapshot=$sd/o.png '--nanoui-script=live:10' --nanoui-wait=0`:
+  - The menu returns YES and the effect lands on the next frame for Cmd+T (tabs 1 to 2), Cmd+W (2 to 1), Cmd+D (panes
+    1 to 2), Shift+Cmd+D (2 to 3), Ctrl+Cmd+S (sidebar hidden, again shown), Shift+Cmd+. (hidden files), Cmd+1 / Cmd+2
+    (list / column), Shift+Cmd+N ("untitled folder" created), Cmd+K (palette open, seen in the final PNG), and, once the
+    rename field no longer has the keyboard, Cmd+Z (listing 4 items to 3) and Shift+Cmd+Z (3 to 4).
+  - It returns NO, as designed, for the keys the view owns: Return, Cmd+Down, Ctrl+Tab, Space, Cmd+Backspace (no menu
+    accelerator: `menu_link.ownsKey`), for Undo / Redo / Close Pane while their items are disabled, and for EVERY chord
+    while a text field has the keyboard (rename field, palette): `ui.suspendMenuKeyEquivalents`; the view's dispatcher
+    (`command_keys.zig`, covered by the offscreen tests, not driven here) is what takes them then, e.g. Cmd+Z during a
+    rename or Cmd+K to close the palette. So Cmd+K in the real app opens the palette
+    through the MENU path, which is why the view-level `chord:cmd+k` of a script never does: that matches menu_link's
+    ownership design, there is no bug.
+  - Window growth: with the screen's visible frame (1443 x 938 here) logged, splitting one pane with Cmd+D leaves the
+    1000-wide window alone for 2 panes (they fit), grows it to 1174 wide for 3 (x unchanged), to 1443 for 4 with x pushed
+    back to the screen's left edge (0), and stays at 1443 for 5 to 8 panes: the real `Window.frame` / `setFrame` hook
+    grows only, within the screen, and the resize lands one frame after the split (it is dispatched to the next turn of
+    the main loop). Height 640 never changed (one row). The snapshot's own Tester keeps its 1000 x 640 size, so the PNG
+    does not show the larger window.
+  - Open With, the real provider (`system_open_with.list`): for `hello.txt` and `b.txt` 12 apps, TextEdit (the default)
+    first, then Numbers, Sublime Text, Pages, Instruments, Script Editor, Claude, Safari, Visual Studio Code, Xcode,
+    Google Chrome, Notes; for `tiny.png` 7 apps, Preview first, ColorSync Utility, Google Chrome, Claude, Safari,
+    QuickTime Player, Image Playground; no duplicates, names without ".app". The context menu rows path works too: the
+    script verbs `rclick:` / `rat:` send a button-right click, not the SECONDARY click `row_input.zig` listens for, so
+    the diagnostics called `c.secondaryDown()` on the view's context (what `Tester.secondaryClick` does) with the mouse
+    on a row: the menu opened, the real provider was asked once (`open_with.State.lookups` 0 to 1) and the final PNG shows
+    "Open With TextEdit (default)" followed by the next seven apps (the menu keeps 8; Launch Services' order, not
+    alphabetical). Nothing was launched (`open` was never called).
+- **Share, partly**: with the inspector open (`click:hello.txt;at:973,54;live:2;click:Share;live:3` at 1000x640 with one
+  pane) the Share button reaches `Hooks.share` with the file's path and its anchor rectangle, and the hidden run does not
+  crash, but `system_share.share` returns silently: `[NSApp keyWindow]` is nil in the hidden, inactive app
+  (`isActive` false), so the picker is never created. The picker itself (and the anchor's y flip) still needs a person.
+- **Still not verified in a running app** (need a visible, active window or real user input): the NSSharingServicePicker
+  popover, launching an app from Open With, the real Quick Look panel's key handling (above), what a REAL keyboard
+  event does to the menu (the CG-backed events above are the same kind of object, but only a keyboard produces
+  Cmd+Backspace's `\x7f` or the arrow keys' F7xx characters), and volume mount/unmount notifications (the volume list at
+  launch is verified).
 - Dragging items out of nanofm to Finder is not possible: nanoui's drag source writes plain text only. Dragging between
   panes and dropping files in from Finder work.
 - Folder reads run on worker threads (navigation, back/forward, reload, columns, folders opened in place, new tabs and

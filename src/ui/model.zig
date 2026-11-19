@@ -419,7 +419,7 @@ pub const Model = struct {
     pub fn applyPending(self: *Model) Allocator.Error!bool {
         self.freeRetired();
         self.view_state.palette.freeRetired();
-        _ = self.preview.thumbs.merge(); // thumbnails that arrived since the last pass
+        self.preview.merge(); // thumbnails and icons that arrived since the last pass
         var changed = try listing_apply.drain(self); // folders read off the main thread
         if (try open_with.service(self)) changed = true; // the apps asked for when the context menu opened
         if (self.vol_signal.take()) try sidebar_ops.refreshVolumes(self); // a mount, an unmount, a rename

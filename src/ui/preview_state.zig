@@ -4,6 +4,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const thumbs = @import("thumbs.zig");
+const file_icons = @import("file_icons.zig");
 const image_info = @import("image_info.zig");
 const quick_look = @import("quick_look_state.zig");
 const Anchor = @import("hooks.zig").Anchor;
@@ -44,17 +45,34 @@ const DimsCache = struct {
 
 pub const State = struct {
     thumbs: *thumbs.Shared,
+    /// Per-file-type icons for rows, crumbs and the inspector fallback (`file_icons.zig`).
+    icons: *file_icons.Shared,
     dims: DimsCache = .{},
     ql: quick_look.State = .{},
     /// The Share button last pressed: the share sheet hangs from it.
     share_anchor: ?Anchor = null,
 
     pub fn init(gpa: Allocator) Allocator.Error!State {
-        return .{ .thumbs = try thumbs.Shared.create(gpa) };
+        const t = try thumbs.Shared.create(gpa);
+        errdefer t.close();
+        return .{ .thumbs = t, .icons = try file_icons.Shared.create(gpa) };
+    }
+
+    /// Lets the providers' callbacks ask for a frame (the context's waker).
+    pub fn setWaker(self: *State, w: ?thumbs.Waker) void {
+        self.thumbs.setWaker(w);
+        self.icons.setWaker(w);
+    }
+
+    /// Start of a pass: what arrived since the last one goes into the caches (and eviction runs).
+    pub fn merge(self: *State) void {
+        _ = self.thumbs.merge();
+        _ = self.icons.merge();
     }
 
     pub fn deinit(self: *State, gpa: Allocator) void {
         self.thumbs.close();
+        self.icons.close();
         for (self.dims.items.items) |e| gpa.free(e.path);
         self.dims.items.deinit(gpa);
     }

@@ -9,6 +9,8 @@ const Model = @import("model.zig").Model;
 const Pane = @import("pane.zig").Pane;
 const style = @import("style.zig");
 const drops = @import("drops.zig");
+const row_icon = @import("row_icon.zig");
+const file_icons = @import("file_icons.zig");
 
 pub const Crumb = struct {
     /// The folder's path: a prefix of the path crumbs were made from.
@@ -70,7 +72,9 @@ pub fn view(c: *ui.Context, m: *Model, pane: *Pane, w: f32) void {
         ui.key(c, c.print("crumb-{d}", .{i}));
         const b = ui.div(c).row().h(22).px(5).gap(4).itemsCenter().rounded(5).hover(th.surface_hover).control();
         defer b.end();
-        ui.icon(c, if (i == 0 and !isHome(m.home, cr.path)) "externaldrive" else if (isHome(m.home, cr.path)) "house" else "folder.fill", .{
+        // The root and the home folder have icons of their own; every other crumb is a plain folder.
+        const own = isHome(m.home, cr.path) or (i == 0 and std.mem.eql(u8, cr.path, "/"));
+        row_icon.draw(c, m, if (own) .{ .path = cr.path } else .folder, file_icons.row_side, 14, if (i == 0 and !isHome(m.home, cr.path)) "externaldrive" else if (isHome(m.home, cr.path)) "house" else "folder.fill", .{
             .size = 11,
             .color = if (last) th.accent else th.muted,
         });

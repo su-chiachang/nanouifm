@@ -14,6 +14,7 @@ const style = @import("style.zig");
 const row_input = @import("row_input.zig");
 const rename_view = @import("rename_view.zig");
 const context_menu = @import("context_menu.zig");
+const row_icon = @import("row_icon.zig");
 
 /// The list below a pane's toolbar: the notice banner (in the focused pane), the column header
 /// and the rows of the shown tab. `w` is the pane's width: narrow panes drop the Kind and Date
@@ -130,11 +131,7 @@ fn rowCells(c: *ui.Context, m: *Model, pane_id: u32, item: lister.FileItem, dept
         const name = ui.div(c).row().grow().minW(0).gap(6).pr(8).pl(@as(f32, @floatFromInt(depth)) * indent).itemsCenter().clip();
         defer name.end();
         toggled = triangle(c, item.is_directory, expanded, selected);
-        ui.icon(c, if (item.is_directory) "folder.fill" else if (item.is_package) "app" else "doc", .{
-            .size = 14,
-            .frame = 16,
-            .color = if (selected) th.accent_text else if (item.is_directory) th.accent else th.muted,
-        });
+        row_icon.drawItem(c, m, item, if (item.is_directory) "folder.fill" else if (item.is_package) "app" else "doc", if (selected) th.accent_text else if (item.is_directory) th.accent else th.muted);
         if (rename_view.editing(m, pane_id, item.path)) {
             rename_view.field(c, m);
         } else {

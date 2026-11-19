@@ -36,6 +36,8 @@ test {
     _ = @import("ui/tests_path_bar.zig");
     _ = @import("ui/image_info.zig");
     _ = @import("ui/thumbs.zig");
+    _ = @import("ui/file_icons.zig");
+    _ = @import("ui/tests_file_icons.zig");
     _ = @import("ui/listing_inbox.zig");
     _ = @import("ui/listing_loader.zig");
     _ = @import("ui/tests_async.zig");
@@ -47,6 +49,7 @@ test {
     std.testing.refAllDecls(@import("ui/system_hooks.zig"));
     std.testing.refAllDecls(@import("ui/system_quick_look.zig"));
     std.testing.refAllDecls(@import("ui/system_thumbs.zig"));
+    std.testing.refAllDecls(@import("ui/system_file_icon.zig"));
     std.testing.refAllDecls(@import("ui/system_listing.zig"));
     std.testing.refAllDecls(@import("ui/system_share.zig"));
     std.testing.refAllDecls(@import("ui/system_window.zig"));
@@ -57,6 +60,7 @@ test {
     _ = @import("ui/tests_snapshot_palette.zig");
     _ = @import("ui/tests_snapshot_sidebar.zig");
     _ = @import("ui/tests_snapshot_inspector.zig");
+    _ = @import("ui/tests_snapshot_icons.zig");
     _ = @import("ui/typeahead.zig");
     _ = @import("ui/column_model.zig");
 }

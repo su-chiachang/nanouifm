@@ -16,6 +16,8 @@ const style = @import("style.zig");
 const format = @import("format.zig");
 const info = @import("inspector_info.zig");
 const image_info = @import("image_info.zig");
+const row_icon = @import("row_icon.zig");
+const file_icons = @import("file_icons.zig");
 const CommandId = @import("command_id.zig").Id;
 
 pub const pad: f32 = 16;
@@ -54,7 +56,9 @@ fn preview(c: *ui.Context, m: *Model, item: FileItem, inner: f32) void {
         });
         if (drawn) return;
     }
-    ui.icon(c, symbolFor(item), .{ .size = 56, .frame = 64, .color = if (item.is_directory) th.accent else th.muted });
+    var kb: [file_icons.max_ext]u8 = undefined;
+    const key = if (m.hooks.file_icon != null) row_icon.keyFor(item, &kb) else .file;
+    row_icon.draw(c, m, key, file_icons.large_side, 64, symbolFor(item), .{ .size = 56, .frame = 64, .color = if (item.is_directory) th.accent else th.muted });
 }
 
 fn heading(c: *ui.Context, m: *Model, item: FileItem) void {

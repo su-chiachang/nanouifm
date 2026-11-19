@@ -16,6 +16,7 @@ const preview = @import("column_preview.zig");
 const row_input = @import("row_input.zig");
 const rename_view = @import("rename_view.zig");
 const context_menu = @import("context_menu.zig");
+const row_icon = @import("row_icon.zig");
 
 const list_edge: f32 = 2;
 
@@ -107,11 +108,7 @@ fn rows(c: *ui.Context, m: *Model, pane: *const Pane, col: *cm.Column, depth: us
         r = if (lit) r.bg(th.accent) else if (selected) r.bg(th.muted.alpha(0.25)) else r.hover(th.surface_hover);
         defer r.end();
         const fg: ui.Color = if (lit) th.accent_text else th.text;
-        ui.icon(c, if (item.is_directory) "folder.fill" else if (item.is_package) "app" else "doc", .{
-            .size = 14,
-            .frame = 16,
-            .color = if (lit) th.accent_text else if (item.is_directory) th.accent else th.muted,
-        });
+        row_icon.drawItem(c, m, item, if (item.is_directory) "folder.fill" else if (item.is_package) "app" else "doc", if (lit) th.accent_text else if (item.is_directory) th.accent else th.muted);
         {
             const name = ui.div(c).row().grow().minW(0).clip();
             defer name.end();

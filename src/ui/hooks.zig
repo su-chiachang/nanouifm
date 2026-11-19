@@ -4,6 +4,7 @@
 //! (The file opener is the same idea and lives in `opener.zig`.)
 const std = @import("std");
 const thumbs = @import("thumbs.zig");
+const file_icons = @import("file_icons.zig");
 const image_info = @import("image_info.zig");
 
 /// The app-level chords a menu bar owns but a focused text field holds back (see `menu_link.zig`):
@@ -84,6 +85,9 @@ pub const Hooks = struct {
     /// Thumbnails for the inspector's preview, made asynchronously (see `thumbs.zig`). Null: the
     /// file's icon is all the preview there is.
     thumbnail: ?thumbs.Provider = null,
+    /// Finder's icon for a kind of file (by extension, or by path for an app, the root, the home
+    /// folder), made asynchronously (see `file_icons.zig`). Null: rows keep their generic symbols.
+    file_icon: ?file_icons.Provider = null,
     /// A picture's size in pixels for the inspector's Resolution row: by default its header is
     /// read from the file (a PNG, JPEG or GIF).
     image_size: image_info.ReadFn = image_info.fromFile,

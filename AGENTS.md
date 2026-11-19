@@ -73,9 +73,9 @@ src/ui/         model.zig (app state, Config, queued Actions), pane.zig, tab.zig
                 inspector and previews: inspector_view.zig (beside the list, `Pane.inspector`, Opt+Cmd+I), item_panel.zig (one
                 item's preview + details + buttons, shared with column_preview.zig), inspector_info.zig, inspector_ops.zig,
                 thumbs.zig (bounded async thumbnail cache over `Hooks.thumbnail`), image_info.zig (PNG/JPEG/GIF size from the
-                header, `Hooks.image_size`), preview_state.zig (`Model.preview`); Quick Look: quick_look.zig (toggle + `sync` that
+                header, `Hooks.image_size`), file_icons.zig (bounded async per-file-type icon cache over `Hooks.file_icon`, asked by KEY: extension / folder / path for apps; at most 8 in flight) + row_icon.zig (draws it in list and column rows, path-bar crumbs and the inspector, generic symbol until it arrives), preview_state.zig (`Model.preview`); Quick Look: quick_look.zig (toggle + `sync` that
                 follows the selection), quick_look_state.zig, `Hooks.quick_look`; main.zig-only system sides (never run in tests):
-                system_quick_look.zig (QLPreviewPanel via objc.defineClass), system_thumbs.zig (QLThumbnailGenerator) + cg_pixels.zig,
+                system_quick_look.zig (QLPreviewPanel via objc.defineClass), system_thumbs.zig (QLThumbnailGenerator) + cg_pixels.zig, system_file_icon.zig (NSWorkspace icons, posted to the main queue),
                 system_share.zig (NSSharingServicePicker); path_bar.zig crumbs are drop targets;
                 async folder listing (`Config.listing`, null = every read inline, the test default): listing_loader.zig (the
                 loader on `Model.loader`: requests with generations, bounded, `Intent` = what runs when the folders are in),

@@ -56,7 +56,7 @@ Files stay at or under 600 lines (nanoui's rule). See `AGENTS.md` for the comman
 ## Known gaps
 
 - **Not verified in a running app** (compiled and wired, but tests cannot show a window): the real Quick Look panel,
-  thumbnails, the share sheet, the real window resize (`system_window.zig`) and the NSWorkspace app list and launch
+  thumbnails, the file icons (`system_file_icon.zig`: NSWorkspace icons, drawn to bitmaps), the share sheet, the real window resize (`system_window.zig`) and the NSWorkspace app list and launch
   (`system_open_with.zig`), native menu-bar key handling, volume mount notifications, the real file watcher, and the
   worker-thread listing runner (`system_listing.zig`; the held and immediate runners are tested).
 - Dragging items out of nanofm to Finder is not possible: nanoui's drag source writes plain text only. Dragging between
@@ -66,7 +66,9 @@ Files stay at or under 600 lines (nanoui's rule). See `AGENTS.md` for the comman
   folder at launch (before the first frame), and the refresh right after a file operation (the operations themselves
   already run on the main thread). Sorting and filtering a landed listing (in memory) still happens on the main thread.
   Two Back presses before the first one lands count as one.
-- Row icons are generic symbols, not per-file Finder icons.
+- Row, crumb and inspector icons are Finder's per-type icons (by extension; applications, the disk root and the home
+  folder by path), asked for once per key. Not shown: folders with a custom icon (they get the plain folder icon),
+  executables without an extension (generic document), the sidebar and the tab strip (SF symbols).
 - Open With is a list of flat rows ("Open With Preview (default)", ...; at most 8 apps, single files only), not a
   submenu: nanoui's menus have none. Opening reports no success or failure of the launched app (NSWorkspace's
   completion handler is not used).

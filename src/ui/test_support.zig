@@ -34,6 +34,12 @@ pub const Fixture = struct {
         try self.tmp.dir.writeFile(testing.io, .{ .sub_path = rel, .data = data });
     }
 
+    /// Whether `rel` exists under the temp folder.
+    pub fn exists(self: *const Fixture, rel: []const u8) bool {
+        self.tmp.dir.access(testing.io, rel, .{}) catch return false;
+        return true;
+    }
+
     pub fn dir(self: *Fixture, rel: []const u8) !void {
         try self.tmp.dir.createDirPath(testing.io, rel);
     }
@@ -100,6 +106,7 @@ pub fn modelAt(fx: *Fixture, rel: []const u8, favorites: []const app_view.Item) 
         .favorites = favorites,
         .locations = &.{.{ .path = "/", .title = "Volume" }},
         .opener = record,
+        .hooks = test_hooks,
     });
 }
 
@@ -123,9 +130,78 @@ pub fn resetOpened() void {
 
 /// Presses a key (a `ui.Shortcut` code, `mods` held) and lets the queued action run; the view
 /// must have taken it.
-pub fn press(t: *ui.Tester, key: u21, mods: struct { cmd: bool = false, shift: bool = false }) !void {
-    if (!t.shortcut(.{ .key = key, .cmd = mods.cmd, .shift = mods.shift })) return error.KeyNotTaken;
+pub fn press(t: *ui.Tester, key: u21, mods: struct { cmd: bool = false, shift: bool = false, alt: bool = false, ctrl: bool = false }) !void {
+    if (!t.shortcut(.{ .key = key, .cmd = mods.cmd, .shift = mods.shift, .alt = mods.alt, .ctrl = mods.ctrl })) return error.KeyNotTaken;
     t.settle(0.2);
+}
+
+// ---- the hooks' recorders: what the app would have put on the system clipboard or shown in
+// Finder, kept in fixed buffers (nothing to free). The real pasteboard is never touched.
+
+pub var copied_text: [4096]u8 = undefined;
+pub var copied_text_len: usize = 0;
+pub var revealed: [4096]u8 = undefined;
+pub var revealed_len: usize = 0;
+pub var mirrored: [4096]u8 = undefined;
+pub var mirrored_len: usize = 0;
+
+fn joinInto(buf: []u8, len: *usize, paths: []const []const u8) void {
+    var w: std.Io.Writer = .fixed(buf);
+    for (paths, 0..) |p, i| {
+        if (i > 0) w.writeAll("\n") catch break;
+        w.writeAll(p) catch break;
+    }
+    len.* = w.buffered().len;
+}
+
+fn recordText(text: []const u8) void {
+    const n = @min(text.len, copied_text.len);
+    @memcpy(copied_text[0..n], text[0..n]);
+    copied_text_len = n;
+}
+
+fn recordReveal(paths: []const []const u8) void {
+    joinInto(&revealed, &revealed_len, paths);
+}
+
+fn recordMirror(paths: []const []const u8) void {
+    joinInto(&mirrored, &mirrored_len, paths);
+}
+
+pub const test_hooks: @import("hooks.zig").Hooks = .{ .copy_text = recordText, .reveal = recordReveal, .copy_files = recordMirror };
+
+pub fn copiedText() []const u8 {
+    return copied_text[0..copied_text_len];
+}
+
+pub fn revealedPaths() []const u8 {
+    return revealed[0..revealed_len];
+}
+
+pub fn mirroredPaths() []const u8 {
+    return mirrored[0..mirrored_len];
+}
+
+pub fn resetHooks() void {
+    copied_text_len = 0;
+    revealed_len = 0;
+    mirrored_len = 0;
+}
+
+/// The names of the focused tab's rows, in order.
+pub fn rowNames(m: *app_view.State, out: *[64][]const u8) []const []const u8 {
+    const items = m.focusedTab().exp.items;
+    const n = @min(items.len, out.len);
+    for (items[0..n], out[0..n]) |it, *o| o.* = it.name;
+    return out[0..n];
+}
+
+/// The one selected path of the focused tab, or null.
+pub fn selectedOnly(m: *app_view.State) ?[]const u8 {
+    const tab = m.focusedTab();
+    if (tab.selection.count() != 1) return null;
+    var it = tab.selection.set.keyIterator();
+    return it.next().?.*;
 }
 
 /// Where the first node drawing icon `symbol` at or below `min_y` is (window points).
@@ -212,3 +288,74 @@ fn countSplits(node: *const @import("pane_sizes.zig").Tree, n: *usize) !void {
         },
     }
 }
+
+/// root/: a.txt, b.txt, dir/ (inner.txt)
+pub fn tree(fx: *Fixture) !void {
+    try fx.file("a.txt", 10);
+    try fx.file("b.txt", 20);
+    try fx.file("dir/inner.txt", 5);
+}
+
+pub const Env = struct {
+    fx: Fixture,
+    m: app_view.State,
+    t: ui.Tester,
+
+    pub fn init(env: *Env) !void {
+        return env.initWith(.{});
+    }
+
+    /// `init` with live refresh's bookkeeping on (`watch = .manual`: a test fires the changes)
+    /// and/or a sidebar favorite titled "Fav" for the folder `favorite` (under the root).
+    pub fn initWith(env: *Env, o: struct { watch: @import("watch.zig").Mode = .off, favorite: ?[]const u8 = null }) !void {
+        env.fx = try Fixture.init();
+        errdefer env.fx.deinit();
+        try tree(&env.fx);
+        const fav_path = if (o.favorite) |f| try env.fx.sub(f) else null;
+        defer if (fav_path) |p| testing.allocator.free(p);
+        env.m = try app_view.State.init(testing.allocator, .{
+            .start_path = env.fx.root,
+            .home_path = env.fx.root,
+            .favorites = if (fav_path) |p| &.{.{ .path = p, .title = "Fav" }} else &.{},
+            .locations = &.{.{ .path = "/", .title = "Volume" }},
+            .opener = record,
+            .hooks = test_hooks,
+            .watch = o.watch,
+        });
+        errdefer env.m.deinit();
+        resetHooks();
+        try open(&env.t, &env.m);
+    }
+
+    pub fn deinit(env: *Env) void {
+        env.t.deinit();
+        env.m.deinit();
+        env.fx.deinit();
+    }
+
+    pub fn click(env: *Env, name: []const u8) !void {
+        try env.t.clickText(name);
+        env.t.settle(0.2);
+    }
+
+    /// Whether exactly `rel` (under the root) is selected.
+    pub fn selected(env: *Env, rel: []const u8) !bool {
+        const want = try env.fx.sub(rel);
+        defer testing.allocator.free(want);
+        const got = selectedOnly(&env.m) orelse return false;
+        return std.mem.eql(u8, got, want);
+    }
+
+    pub fn noticeHas(env: *Env, needle: []const u8) bool {
+        const n = env.m.notice orelse return false;
+        return std.mem.indexOf(u8, n, needle) != null;
+    }
+
+    /// Types into the rename field (its text is selected) and presses Return.
+    pub fn renameTo(env: *Env, name: []const u8) void {
+        env.t.textOps(&.{ .{ .command = .select_all }, .{ .command = .delete_backward } });
+        if (name.len > 0) env.t.typeText(name);
+        env.t.key(.enter);
+        env.t.settle(0.2);
+    }
+};

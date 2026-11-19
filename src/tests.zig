@@ -13,7 +13,14 @@ test {
     _ = @import("ui/tests_split.zig");
     _ = @import("ui/tests_columns.zig");
     _ = @import("ui/tests_list_keys.zig");
+    _ = @import("ui/tests_fileops.zig");
+    _ = @import("ui/tests_context.zig");
+    _ = @import("ui/tests_commands.zig");
+    _ = @import("ui/tests_watch.zig");
+    _ = @import("ui/tests_drop.zig");
+    _ = @import("ui/commands.zig");
     _ = @import("ui/tests_snapshot.zig");
+    _ = @import("ui/tests_snapshot_ops.zig");
     _ = @import("ui/typeahead.zig");
     _ = @import("ui/column_model.zig");
 }

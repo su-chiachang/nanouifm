@@ -161,3 +161,24 @@ pub fn typeSelect(gpa: Allocator, tab: *Tab, o: Opts, prefix: []const u8) Alloca
     try select(gpa, tab, o, depth, i, false);
     return true;
 }
+
+/// Selects `paths` (all in one folder, shown by one of the stack's columns) and scrolls the
+/// first into sight; the columns after it follow, as for a click. Paths no column shows are
+/// ignored.
+pub fn selectPaths(gpa: Allocator, tab: *Tab, o: Opts, paths: []const []const u8) Allocator.Error!void {
+    if (paths.len == 0) return;
+    const folder = std.fs.path.dirname(paths[0]) orelse return;
+    const cs = &tab.col;
+    for (cs.columns.items, 0..) |*col, depth| {
+        if (!std.mem.eql(u8, col.path, folder)) continue;
+        col.selection.clear(gpa);
+        var first: ?usize = null;
+        for (paths) |p| {
+            const i = col.listing.indexOf(p) orelse continue;
+            try col.selection.click(gpa, col.items(), i, .{ .cmd = true });
+            if (first == null) first = i;
+        }
+        col.reveal = first;
+        return afterSelection(gpa, tab, o, depth);
+    }
+}

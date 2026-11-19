@@ -6,6 +6,7 @@ const app_view = @import("app.zig");
 const state_model = @import("core/state_model.zig");
 const sidebar_model = @import("ui/sidebar_model.zig");
 const opener = @import("ui/opener.zig");
+const system_hooks = @import("ui/system_hooks.zig");
 
 pub const panic = nanoui.panic;
 pub const std_options = nanoui.std_options;
@@ -47,6 +48,9 @@ fn run(init: nanoui.Init) !void {
         .show_hidden = persisted.show_hidden,
         // The only place a real app can be launched from.
         .opener = opener.system,
+        // Clipboard mirror, Reveal in Finder, Option state; live refresh with real watchers.
+        .hooks = system_hooks.hooks,
+        .watch = .system,
     });
     defer state.deinit();
 

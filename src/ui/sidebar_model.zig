@@ -86,6 +86,14 @@ pub const Sidebar = struct {
         try sec.rows.append(self.gpa, .{ .path = path, .title = title, .icon = iconFor(kind, it.path) });
     }
 
+    /// Pin to Sidebar: a Pinned row for `path`, unless Favorites or Pinned already has one.
+    pub fn pin(self: *Sidebar, path: []const u8) Allocator.Error!void {
+        for ([_]SectionKind{ .favorites, .pinned }) |kind| {
+            for (self.sections[@backingInt(kind)].rows.items) |r| if (std.mem.eql(u8, r.path, path)) return;
+        }
+        try self.addRow(.pinned, .{ .path = path });
+    }
+
     /// The row to highlight for the folder shown: the first one that is that folder.
     pub fn highlighted(self: *const Sidebar, folder: []const u8) ?struct { section: usize, row: usize } {
         for (self.sections, 0..) |sec, si| {

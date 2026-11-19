@@ -18,8 +18,10 @@ pub fn build(b: *std.Build) void {
     run.addPassthruArgs();
     b.step("run", "Run Nanofm (opens its window)").dependOn(&run.step);
 
-    // Tests render the view offscreen with ui.Tester: no window opens.
-    const tests = b.addTest(.{ .root_module = b.createModule(.{
+    // Tests render the view offscreen with ui.Tester: no window opens. `-Dtest-filter=text` runs
+    // only the tests whose names contain it.
+    const filters = b.option([]const []const u8, "test-filter", "only tests whose name contains this") orelse &.{};
+    const tests = b.addTest(.{ .filters = filters, .root_module = b.createModule(.{
         .root_source_file = b.path("src/tests.zig"),
         .target = target,
         .optimize = optimize,

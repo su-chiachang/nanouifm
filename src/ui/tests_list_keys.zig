@@ -1,5 +1,5 @@
 //! List view's keyboard and folder expansion through ui.Tester over temp trees: arrows, Home/End,
-//! Shift extension, type-to-select, Return and double-click (a folder opens, a file goes to the
+//! Shift extension, type-to-select, Cmd+Down and double-click (a folder opens, a file goes to the
 //! injected opener, never to a real app), and disclosure triangles with their persistence.
 const std = @import("std");
 const nanoui = @import("nanoui");
@@ -135,7 +135,7 @@ test "type-to-select in the list" {
     try testing.expect(try selectedIs(&m, &fx, "alpha"));
 }
 
-test "Return opens a folder; a file goes to the injected opener only" {
+test "Cmd+Down (Return renames now) opens a folder; a file goes to the injected opener only" {
     var fx = try ts.Fixture.init();
     defer fx.deinit();
     defer ts.resetOpened();
@@ -148,7 +148,7 @@ test "Return opens a folder; a file goes to the injected opener only" {
 
     try t.clickText("apple.txt");
     t.settle(0.2);
-    try ts.press(&t, S.enter, .{});
+    try ts.press(&t, S.down, .{ .cmd = true });
     try testing.expectEqual(@as(usize, 1), ts.opened.items.len);
     const apple = try fx.sub("apple.txt");
     defer testing.allocator.free(apple);
@@ -165,7 +165,7 @@ test "Return opens a folder; a file goes to the injected opener only" {
     // Return on a folder goes there, with a history entry.
     try t.clickText("types");
     t.settle(0.2);
-    try ts.press(&t, S.enter, .{});
+    try ts.press(&t, S.down, .{ .cmd = true });
     const types = try fx.sub("types");
     defer testing.allocator.free(types);
     try testing.expectEqualStrings(types, m.focusedTab().path());
@@ -173,7 +173,7 @@ test "Return opens a folder; a file goes to the injected opener only" {
     try testing.expect(t.hasText("banana"));
     try testing.expectEqual(@as(usize, 2), ts.opened.items.len);
 
-    // Cmd+Down is Return too; with a file and a folder selected only the file opens.
+    // With a file and a folder selected only the file opens.
     try ts.press(&t, S.up, .{ .cmd = true });
     try testing.expectEqualStrings(fx.root, m.focusedTab().path());
     try ts.press(&t, S.home, .{});

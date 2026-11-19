@@ -1,0 +1,68 @@
+//! The names of the commands (`commands.zig` has the table that gives each its title, shortcut
+//! and behaviour). A leaf file: the model's `Action.run_command` carries one of these. The
+//! string id, for a palette or a script, is `@tagName(id)` ("file_new_folder").
+pub const Id = enum {
+    // File
+    tab_new,
+    tab_close,
+    pane_close,
+    file_new_folder,
+    file_open,
+    file_open_down,
+    file_open_new_tab,
+    file_open_split,
+    file_quick_look,
+    file_rename,
+    file_duplicate,
+    file_trash,
+    file_reveal,
+    file_copy_path,
+    file_pin,
+    // Edit
+    edit_undo,
+    edit_redo,
+    edit_copy,
+    edit_paste,
+    edit_paste_move,
+    edit_select_all,
+    // View
+    view_list,
+    view_column,
+    sort_name,
+    sort_kind,
+    sort_size,
+    sort_modified,
+    view_hidden,
+    view_split_side,
+    view_split_stacked,
+    layout_single,
+    layout_two_columns,
+    layout_two_rows,
+    layout_three_columns,
+    layout_three_rows,
+    layout_left_and_right_stack,
+    layout_left_stack_and_right,
+    layout_top_and_bottom_row,
+    layout_top_row_and_bottom,
+    layout_grid_2x2,
+    layout_four_columns,
+    layout_four_rows,
+    // Go
+    go_back,
+    go_forward,
+    go_up,
+    go_home,
+    go_desktop,
+    go_documents,
+    go_downloads,
+    go_applications,
+    go_to_folder,
+    // Window
+    tab_next,
+    tab_prev,
+    pane_focus_next,
+    pane_focus_prev,
+};
+
+/// The menu a command belongs to.
+pub const Category = enum { file, edit, view, go, window };

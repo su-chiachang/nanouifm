@@ -359,7 +359,7 @@ test "the mode toggle keeps each tab's folder, and is per pane" {
     try testing.expect(!t.hasText("Date Modified"));
 }
 
-test "Return and double-click open a folder (the stack re-roots) and a file (the opener)" {
+test "Cmd+Down and double-click open a folder (the stack re-roots) and a file (the opener)" {
     var fx = try ts.Fixture.init();
     defer fx.deinit();
     defer ts.resetOpened();
@@ -374,13 +374,13 @@ test "Return and double-click open a folder (the stack re-roots) and a file (the
 
     try ts.press(&t, S.down, .{}); // beta
     try expectCols(&m, &fx, &.{ "", "alpha", "alpha/beta" });
-    try ts.press(&t, S.enter, .{}); // opens beta as the tab's location, rooted at its parent
+    try ts.press(&t, S.down, .{ .cmd = true }); // opens beta as the tab's location, rooted at its parent
     try expectCols(&m, &fx, &.{ "alpha", "alpha/beta" });
     try testing.expectEqual(@as(usize, 0), ts.opened.items.len);
 
     try ts.press(&t, S.down, .{}); // gamma, in beta's column
     try ts.press(&t, S.down, .{}); // note.md: a file ends the stack
-    try ts.press(&t, S.enter, .{});
+    try ts.press(&t, S.down, .{ .cmd = true });
     try testing.expectEqual(@as(usize, 1), ts.opened.items.len);
     const note = try fx.sub("alpha/beta/note.md");
     defer testing.allocator.free(note);

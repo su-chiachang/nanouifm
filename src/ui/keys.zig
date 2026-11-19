@@ -21,15 +21,11 @@ const nav_keys = [_]struct { key: u21, nav: NavKey }{
 };
 
 pub fn view(c: *ui.Context, m: *Model) void {
-    if (c.shortcut(.{ .key = '1', .cmd = true })) m.queue(.{ .set_view_mode = .list }) catch {};
-    if (c.shortcut(.{ .key = '2', .cmd = true })) m.queue(.{ .set_view_mode = .column }) catch {};
-    if (c.shortcut(.{ .key = S.down, .cmd = true })) m.queue(.open_selection) catch {};
     if (c.focus_is_text) return; // typing goes to the field
     for (nav_keys) |n| {
         if (c.shortcut(.{ .key = n.key })) m.queue(.{ .nav = .{ .key = n.nav, .shift = false } }) catch {};
         if (c.shortcut(.{ .key = n.key, .shift = true })) m.queue(.{ .nav = .{ .key = n.nav, .shift = true } }) catch {};
     }
-    if (c.shortcut(.{ .key = S.enter })) m.queue(.open_selection) catch {};
     // Any other bare key is type-to-select (Shift only changes the case, which is ignored).
     if (c.input.shortcut) |s| {
         if (s.cmd or s.ctrl or s.alt or !typeahead.isTypeable(s.key)) return;

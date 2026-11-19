@@ -1,0 +1,51 @@
+//! The real thing behind `Hooks`: the system pasteboard (file URLs, text), Finder, and the
+//! keyboard's Option state, through nanoui's `clipboard` / `shell` and `objc.msg`. For main.zig
+//! only: the model's hooks are empty unless `Config` names these, so no test touches any of it.
+const std = @import("std");
+const nanoui = @import("nanoui");
+const objc = nanoui.objc;
+const Hooks = @import("hooks.zig").Hooks;
+
+pub const hooks: Hooks = .{
+    .copy_files = copyFiles,
+    .copy_text = nanoui.clipboard.writeText,
+    .reveal = reveal,
+    .read_files = readFiles,
+    .change_count = nanoui.clipboard.changeCount,
+    .option_held = optionHeld,
+};
+
+/// An NSArray of NSURLs for `paths`.
+fn urlArray(paths: []const []const u8) objc.Object {
+    const arr = objc.msg(objc.Object, objc.class("NSMutableArray"), "arrayWithCapacity:", .{@as(objc.NSUInteger, paths.len)});
+    for (paths) |p| {
+        const url = objc.msg(objc.Object, objc.class("NSURL"), "fileURLWithPath:", .{objc.nsString(p)});
+        objc.msg(void, arr, "addObject:", .{url});
+    }
+    return arr;
+}
+
+/// Copy: the files go on the pasteboard as file URLs, so Finder and other apps can paste them.
+fn copyFiles(paths: []const []const u8) void {
+    const pool = objc.Pool.push();
+    defer pool.pop();
+    const pb = objc.msg(objc.Object, objc.class("NSPasteboard"), "generalPasteboard", .{});
+    _ = objc.msg(objc.NSInteger, pb, "clearContents", .{});
+    _ = objc.msg(objc.BOOL, pb, "writeObjects:", .{urlArray(paths)});
+}
+
+fn reveal(paths: []const []const u8) void {
+    const pool = objc.Pool.push();
+    defer pool.pop();
+    const ws = objc.msg(objc.Object, objc.class("NSWorkspace"), "sharedWorkspace", .{});
+    objc.msg(void, ws, "activateFileViewerSelectingURLs:", .{urlArray(paths)});
+}
+
+fn readFiles(gpa: std.mem.Allocator) ?[][]u8 {
+    return nanoui.clipboard.readFiles(gpa) catch null;
+}
+
+fn optionHeld() bool {
+    const flags = objc.msg(objc.NSUInteger, objc.class("NSEvent"), "modifierFlags", .{});
+    return flags & (1 << 19) != 0; // NSEventModifierFlagOption
+}

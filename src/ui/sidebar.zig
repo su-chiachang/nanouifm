@@ -5,6 +5,7 @@ const nanoui = @import("nanoui");
 const ui = nanoui.ui;
 const Model = @import("model.zig").Model;
 const style = @import("style.zig");
+const drops = @import("drops.zig");
 
 pub fn view(c: *ui.Context, m: *Model) void {
     const th = c.theme;
@@ -20,7 +21,7 @@ pub fn view(c: *ui.Context, m: *Model) void {
         for (sec.rows.items, 0..) |row, ri| {
             const selected = if (here) |h| h.section == si and h.row == ri else false;
             ui.key(c, c.print("sidebar-{d}-{d}", .{ si, ri }));
-            if (rowView(c, row.icon, row.title, selected)) {
+            if (rowView(c, m, row.path, row.icon, row.title, selected)) {
                 // A click goes to the focused pane; Cmd-click opens a new tab there.
                 if (c.input.cmd) style.post(c, m, .{ .open_in_new_tab = row.path }) else style.post(c, m, .{ .open = row.path });
             }
@@ -35,7 +36,9 @@ fn sectionHeader(c: *ui.Context, title: []const u8, si: usize) void {
     ui.text(c, title, .{ .size = 11, .weight = .semibold, .color = c.theme.muted });
 }
 
-fn rowView(c: *ui.Context, symbol: []const u8, title: []const u8, selected: bool) bool {
+/// A sidebar row: a click goes there; files dropped on it (from Finder, or dragged from a pane)
+/// go into its folder.
+fn rowView(c: *ui.Context, m: *Model, path: []const u8, symbol: []const u8, title: []const u8, selected: bool) bool {
     const th = c.theme;
     var r = ui.div(c).row().wFull().h(26).px(8).gap(8).itemsCenter().rounded(6).control();
     r = if (selected) r.bg(th.text.alpha(0.10)) else r.hover(th.text.alpha(0.06));
@@ -43,6 +46,8 @@ fn rowView(c: *ui.Context, symbol: []const u8, title: []const u8, selected: bool
     ui.icon(c, symbol, .{ .size = 14, .frame = 16, .color = th.accent });
     ui.text(c, title, .{ .size = 13, .weight = if (selected) .medium else .regular, .truncate = .ellipsis });
     const it = r.interaction();
+    drops.accept(c, m, r.index, path);
+    if (drops.land(c, m, it.rect, path)) c.node(r.index).style.background = th.accent.alpha(0.3);
     if (it.clicked) c.changed = true;
     return it.clicked;
 }

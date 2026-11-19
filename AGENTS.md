@@ -9,6 +9,7 @@ renderer on Linux and Windows), from one codebase.
 ```sh
 nui build                       # compile (zig build)
 nui test                        # the tests: views rendered offscreen with ui.Tester
+zig build test -Dtest-filter=text # only the tests whose name contains text
 nui snapshot --out shot.png     # build, then render the app to a PNG, no window
 nui snapshot --out shot.png --script "click:Increment;click:Increment"
 nui run                         # open the app's window (for people, not agents)
@@ -45,7 +46,14 @@ src/ui/         model.zig (app state, Config, queued Actions), pane.zig, tab.zig
                 path_bar.zig, format.zig, style.zig; list keys/expansion: keys.zig, nav_ops.zig, list_nav.zig,
                 expansion.zig, typeahead.zig; column view: column_model.zig, column_ops.zig,
                 column_view.zig, column_preview.zig; opener.zig (injected file opener, null in tests);
-                tests.zig + test_support.zig
+                commands.zig (THE command registry: table of id/title/shortcut/enabled/checked/run, used by
+                command_keys.zig, context_menu.zig and next the menu bar + palette; command.zig,
+                command_id.zig, command_impl.zig); file ops: file_actions.zig (through the model's
+                FileOperationService), file_target.zig, file_refresh.zig, clipboard.zig (internal),
+                rename.zig + rename_view.zig (inline rename); hooks.zig (injected clipboard mirror / Reveal /
+                Option, null in tests) + system_hooks.zig (main.zig only); context_menu.zig, row_input.zig,
+                goto.zig (Go to Folder); watch.zig (live refresh, `Config.watch`); drops.zig (Finder drops
+                and pane-to-pane drag); tests.zig, tests_*.zig + test_support.zig (`ts.Env`)
 src/core/       the UI-free core library (`zig build test-core`)
 ```
 

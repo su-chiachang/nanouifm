@@ -13,6 +13,9 @@ const cm = @import("column_model.zig");
 const listing = @import("listing.zig");
 const style = @import("style.zig");
 const preview = @import("column_preview.zig");
+const row_input = @import("row_input.zig");
+const rename_view = @import("rename_view.zig");
+const context_menu = @import("context_menu.zig");
 
 const list_edge: f32 = 2;
 
@@ -22,6 +25,8 @@ pub fn view(c: *ui.Context, m: *Model, pane: *Pane, focused: bool) void {
     ui.keyInt(c, tab.id); // each tab keeps its own scroll
     const area = ui.div(c).column().wFull().grow().clip();
     defer area.end();
+    m.view_state.ctx_menu.claimed = false;
+    defer context_menu.emptySpaceClicked(c, m, pane.id, area.interaction().secondary_clicked);
     const cs = &tab.col;
     const preview_item = previewItem(cs);
 
@@ -110,25 +115,14 @@ fn rows(c: *ui.Context, m: *Model, pane: *const Pane, col: *cm.Column, depth: us
         {
             const name = ui.div(c).row().grow().minW(0).clip();
             defer name.end();
-            ui.text(c, item.name, .{ .size = 13, .color = fg, .truncate = .ellipsis });
-        }
-        if (item.is_directory) ui.icon(c, "chevron.right", .{ .size = 10, .weight = .semibold, .color = if (lit) th.accent_text else th.muted });
-        const it = r.interaction();
-        if (it.clicked) {
-            c.changed = true;
-            style.post(c, m, .{ .focus_pane = pane.id });
-            if (it.double_clicked) {
-                style.post(c, m, if (item.is_directory) .{ .open = item.path } else .{ .open_file = item.path });
+            if (rename_view.editing(m, pane.id, item.path)) {
+                rename_view.field(c, m);
             } else {
-                style.post(c, m, .{ .column_click = .{
-                    .pane = pane.id,
-                    .depth = @intCast(depth),
-                    .index = @intCast(i),
-                    .cmd = c.input.cmd,
-                    .shift = c.input.shift,
-                } });
+                ui.text(c, item.name, .{ .size = 13, .color = fg, .truncate = .ellipsis });
             }
         }
+        if (item.is_directory) ui.icon(c, "chevron.right", .{ .size = 10, .weight = .semibold, .color = if (lit) th.accent_text else th.muted });
+        row_input.column(c, m, pane, depth, items, i, selected, r);
     }
     list.end();
 }

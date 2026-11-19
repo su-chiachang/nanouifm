@@ -27,6 +27,17 @@ const nav_ops = @import("nav_ops.zig");
 const NavKey = @import("nav_key.zig").NavKey;
 const TypeAhead = @import("typeahead.zig").TypeAhead;
 const opener = @import("opener.zig");
+const nanoui = @import("nanoui");
+const file_ops = @import("../core/file_ops.zig");
+const Clipboard = @import("clipboard.zig").Clipboard;
+const Hooks = @import("hooks.zig").Hooks;
+const rename = @import("rename.zig");
+const watch = @import("watch.zig");
+const goto = @import("goto.zig");
+const context_menu = @import("context_menu.zig");
+const commands = @import("commands.zig");
+const file_actions = @import("file_actions.zig");
+const CommandId = @import("command_id.zig").Id;
 
 pub const Item = sidebar_model.Item;
 pub const LayoutTree = pane_sizes.Tree;
@@ -48,6 +59,18 @@ pub const Config = struct {
     /// How a file is opened (double-click, Return). Null: files are not opened. Only main.zig
     /// passes `opener.system`, so no test can launch an app by accident; tests pass a recorder.
     opener: ?opener.OpenFn = null,
+    /// Clipboard mirror, Reveal in Finder, Option state: see `hooks.zig`. Empty in tests.
+    hooks: Hooks = .{},
+    /// Live refresh: `.off` (default), `.manual` (tests fire changes), `.system` (main.zig).
+    watch: watch.Mode = .off,
+};
+
+/// Files to move or copy into a folder (a drop from Finder or another pane).
+pub const DropJob = struct {
+    paths: []const []const u8,
+    dest: []const u8,
+    /// Option held: copy instead of move.
+    copy: bool = false,
 };
 
 /// What the view asks for. Applied by `Model.applyPending`.
@@ -96,17 +119,53 @@ pub const Action = union(enum) {
     toggle_expand: struct { pane: u32, path: []const u8 },
     /// A click on row `index` of column `depth` of a pane's column view.
     column_click: struct { pane: u32, depth: u32, index: u32, cmd: bool, shift: bool },
+    /// A command of the registry (`commands.zig`): shortcuts, menus and the palette all queue this.
+    run_command: CommandId,
+    /// Return, or the keyboard leaving the field, in the inline rename.
+    commit_rename,
+    /// Escape in the inline rename.
+    cancel_rename,
+    /// Files dropped on a folder (the paths and the folder are owned by the queue).
+    drop_files: DropJob,
 };
 
-/// The path an action owns, if it has one.
-fn ownedPath(a: *Action) ?*[]const u8 {
-    return switch (a.*) {
-        .open => |*p| p,
-        .open_in_new_tab => |*p| p,
-        .open_file => |*p| p,
-        .toggle_expand => |*e| &e.path,
-        else => null,
-    };
+/// A copy of `a` that owns its strings (what `Model.queue` keeps), and the matching free.
+fn dupeOwned(gpa: Allocator, a: Action) Allocator.Error!Action {
+    var act = a;
+    switch (act) {
+        .open, .open_in_new_tab, .open_file => |*p| p.* = try gpa.dupe(u8, p.*),
+        .toggle_expand => |*e| e.path = try gpa.dupe(u8, e.path),
+        .drop_files => |*d| {
+            const dest = try gpa.dupe(u8, d.dest);
+            errdefer gpa.free(dest);
+            const paths = try gpa.alloc([]const u8, d.paths.len);
+            var made: usize = 0;
+            errdefer {
+                for (paths[0..made]) |p| gpa.free(p);
+                gpa.free(paths);
+            }
+            for (d.paths, paths) |src, *dst| {
+                dst.* = try gpa.dupe(u8, src);
+                made += 1;
+            }
+            d.* = .{ .paths = paths, .dest = dest, .copy = d.copy };
+        },
+        else => {},
+    }
+    return act;
+}
+
+fn freeOwned(gpa: Allocator, a: Action) void {
+    switch (a) {
+        .open, .open_in_new_tab, .open_file => |p| gpa.free(p),
+        .toggle_expand => |e| gpa.free(e.path),
+        .drop_files => |d| {
+            for (d.paths) |p| gpa.free(p);
+            gpa.free(d.paths);
+            gpa.free(d.dest);
+        },
+        else => {},
+    }
 }
 
 /// What the view keeps between frames that is not model data.
@@ -118,6 +177,10 @@ pub const ViewState = struct {
     /// A column's divider pressed: which one, and where the pointer last was.
     col_drag: ?struct { pane: u32, depth: u32, last: f32 } = null,
     layout_menu_open: bool = false,
+    /// The context menu: open, where (window points), which pane, and what was right-clicked.
+    ctx_menu: context_menu.State = .{},
+    /// A drag of files from a pane's rows (pane-to-pane): the pane they come from.
+    file_drag: ?u32 = null,
     /// The layout button's rectangle (window points), where its popover hangs.
     layout_anchor: ?pane_sizes.Rect = null,
 };
@@ -149,6 +212,19 @@ pub const Model = struct {
     opener: ?opener.OpenFn = null,
     /// What type-to-select has heard lately.
     typeahead: TypeAhead = .{},
+    /// Every undoable file operation goes through this (undo/redo stacks, failure detail).
+    ops: file_ops.FileOperationService,
+    /// Copy's files; Paste reads this (see `clipboard.zig`).
+    clip: Clipboard,
+    hooks: Hooks = .{},
+    /// The inline rename in progress, if any.
+    rename: ?rename.Session = null,
+    /// Live refresh's watchers (`watch.zig`).
+    watch: watch.Watchers,
+    /// Go to Folder's dialog.
+    goto: goto.State = .{},
+    /// How a watcher callback wakes a frame; copied from the context each pass.
+    waker: ?watch.Waker = null,
 
     pub fn init(gpa: Allocator, cfg: Config) Allocator.Error!Model {
         const home = try normalize(gpa, cfg.home_path);
@@ -159,7 +235,10 @@ pub const Model = struct {
         defer gpa.free(start);
         var pane = try Pane.init(gpa, start, .{ .show_hidden = cfg.show_hidden }, .{ .pane = 1, .tab = 2 });
         errdefer pane.deinit();
-        var m: Model = .{ .gpa = gpa, .home = home, .sidebar = sb, .show_hidden = cfg.show_hidden, .layout = .{ .leaf = pane.id }, .next_id = 3, .opener = cfg.opener };
+        var m: Model = .{ .gpa = gpa, .home = home, .sidebar = sb, .show_hidden = cfg.show_hidden, .layout = .{ .leaf = pane.id }, .next_id = 3, .opener = cfg.opener, .ops = file_ops.FileOperationService.init(gpa), .clip = Clipboard.init(gpa), .hooks = cfg.hooks, .watch = watch.Watchers.init(gpa, cfg.watch) };
+        errdefer m.ops.deinit();
+        errdefer m.clip.deinit();
+        errdefer m.watch.deinit();
         errdefer m.sizes.deinit(gpa);
         try m.sizes.reset(gpa, &m.layout);
         try m.panes.append(gpa, pane);
@@ -173,6 +252,11 @@ pub const Model = struct {
         self.retired_panes.deinit(self.gpa);
         self.retired_tabs.deinit(self.gpa);
         if (self.notice) |n| self.gpa.free(n);
+        if (self.rename) |*r| r.deinit(self.gpa);
+        self.goto.deinit();
+        self.watch.deinit();
+        self.clip.deinit();
+        self.ops.deinit();
         for (self.panes.items) |*p| p.deinit();
         self.panes.deinit(self.gpa);
         self.layout.deinit(self.gpa);
@@ -215,14 +299,13 @@ pub const Model = struct {
     // ---- actions ----
 
     pub fn queue(self: *Model, a: Action) Allocator.Error!void {
-        var act = a;
-        if (ownedPath(&act)) |p| p.* = try self.gpa.dupe(u8, p.*);
-        errdefer if (ownedPath(&act)) |p| self.gpa.free(p.*);
+        const act = try dupeOwned(self.gpa, a);
+        errdefer freeOwned(self.gpa, act);
         try self.pending.append(self.gpa, act);
     }
 
     fn clearPending(self: *Model) void {
-        for (self.pending.items) |*a| if (ownedPath(a)) |p| self.gpa.free(p.*);
+        for (self.pending.items) |a| freeOwned(self.gpa, a);
         self.pending.clearRetainingCapacity();
     }
 
@@ -230,7 +313,9 @@ pub const Model = struct {
     pub fn applyPending(self: *Model) Allocator.Error!bool {
         self.freeRetired();
         try nav_ops.syncColumns(self); // the shown tabs of column-view panes match their folders
-        if (self.pending.items.len == 0) return false;
+        var changed = try self.watch.refreshDirty(self); // folders that changed on disk
+        defer self.watch.reconcile(self) catch {}; // watch what is drawn after this pass
+        if (self.pending.items.len == 0) return changed;
         defer self.clearPending();
         // Actions don't queue more, but copy so the loop is safe if one ever does.
         const todo = try self.gpa.dupe(Action, self.pending.items);
@@ -263,8 +348,14 @@ pub const Model = struct {
             .open_file => |p| try self.openFile(p),
             .toggle_expand => |e| try nav_ops.toggleExpand(self, e.pane, e.path),
             .column_click => |c| try nav_ops.columnClick(self, c.pane, c.depth, c.index, .{ .cmd = c.cmd, .shift = c.shift }),
+            .run_command => |id| try commands.run(self, id),
+            .commit_rename => try rename.commit(self),
+            .cancel_rename => rename.cancel(self),
+            .drop_files => |d| try file_actions.drop(self, d),
         };
-        return true;
+        rename.validate(self);
+        changed = true;
+        return changed;
     }
 
     // ---- navigation ----
@@ -286,6 +377,21 @@ pub const Model = struct {
         const msg = try std.fmt.allocPrint(self.gpa, "Can't open \"{s}\". {s}", .{ if (name.len == 0) path else name, listing.errorText(e) });
         self.clearNotice();
         self.notice = msg;
+    }
+
+    /// Puts `text` in the banner (copied).
+    pub fn raise(self: *Model, text: []const u8) Allocator.Error!void {
+        const msg = try self.gpa.dupe(u8, text);
+        self.clearNotice();
+        self.notice = msg;
+    }
+
+    /// Whether there is something to paste: Copy's files, or (the real app) files another app put
+    /// on the system pasteboard since.
+    pub fn canPaste(self: *const Model) bool {
+        if (!self.clip.isEmpty()) return true;
+        const cc = self.hooks.change_count orelse return false;
+        return self.hooks.read_files != null and cc() != self.clip.mirrored;
     }
 
     pub fn clearNotice(self: *Model) void {

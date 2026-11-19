@@ -11,6 +11,9 @@ const Tab = @import("tab.zig").Tab;
 const listing = @import("listing.zig");
 const format = @import("format.zig");
 const style = @import("style.zig");
+const row_input = @import("row_input.zig");
+const rename_view = @import("rename_view.zig");
+const context_menu = @import("context_menu.zig");
 
 /// The list below a pane's toolbar: the notice banner (in the focused pane), the column header
 /// and the rows of the shown tab. `w` is the pane's width: narrow panes drop the Kind and Date
@@ -72,6 +75,9 @@ fn rows(c: *ui.Context, m: *Model, pane: *const Pane, tab: *Tab, cols: style.Col
     ui.keyInt(c, tab.id);
     const area = ui.div(c).column().wFull().grow().clip();
     defer area.end();
+    // A right-click on the empty part of the list (the rows claim their own).
+    m.view_state.ctx_menu.claimed = false;
+    defer context_menu.emptySpaceClicked(c, m, pane.id, area.interaction().secondary_clicked);
     const items = tab.exp.items;
     if (tab.listing.err) |e| {
         const msg = ui.div(c).sizeFull().center();
@@ -105,21 +111,8 @@ fn rows(c: *ui.Context, m: *Model, pane: *const Pane, tab: *Tab, cols: style.Col
         var r = ui.div(c).row().wFull().h(style.row_height).px(6).itemsCenter().rounded(6).control();
         r = if (selected) r.bg(th.accent) else r.hover(th.surface_hover);
         defer r.end();
-        const toggled = rowCells(c, item, tab.exp.depth[i], tab.exp.isExpanded(item.path), selected, cols);
-        const it = r.interaction();
-        if (toggled) {
-            c.changed = true;
-            style.post(c, m, .{ .focus_pane = pane.id });
-            style.post(c, m, .{ .toggle_expand = .{ .pane = pane.id, .path = item.path } });
-        } else if (it.clicked) {
-            c.changed = true;
-            style.post(c, m, .{ .focus_pane = pane.id });
-            if (it.double_clicked) {
-                style.post(c, m, if (item.is_directory) .{ .open = item.path } else .{ .open_file = item.path });
-            } else {
-                tab.selection.click(m.gpa, items, i, .{ .cmd = c.input.cmd, .shift = c.input.shift }) catch {};
-            }
-        }
+        const toggled = rowCells(c, m, pane.id, item, tab.exp.depth[i], tab.exp.isExpanded(item.path), selected, cols);
+        row_input.list(c, m, pane, tab, items, i, r, toggled);
     }
     list.end();
 }
@@ -128,7 +121,7 @@ fn rows(c: *ui.Context, m: *Model, pane: *const Pane, tab: *Tab, cols: style.Col
 const indent: f32 = 16;
 
 /// One row's cells; true if its disclosure triangle was clicked.
-fn rowCells(c: *ui.Context, item: lister.FileItem, depth: u16, expanded: bool, selected: bool, cols: style.Columns) bool {
+fn rowCells(c: *ui.Context, m: *Model, pane_id: u32, item: lister.FileItem, depth: u16, expanded: bool, selected: bool, cols: style.Columns) bool {
     const th = c.theme;
     const fg: ui.Color = if (selected) th.accent_text else th.text;
     const dim: ui.Color = if (selected) th.accent_text.alpha(0.85) else th.muted;
@@ -142,7 +135,11 @@ fn rowCells(c: *ui.Context, item: lister.FileItem, depth: u16, expanded: bool, s
             .frame = 16,
             .color = if (selected) th.accent_text else if (item.is_directory) th.accent else th.muted,
         });
-        ui.text(c, item.name, .{ .size = 13, .color = fg, .truncate = .ellipsis });
+        if (rename_view.editing(m, pane_id, item.path)) {
+            rename_view.field(c, m);
+        } else {
+            ui.text(c, item.name, .{ .size = 13, .color = fg, .truncate = .ellipsis });
+        }
     }
     if (cols.kind) {
         const k = ui.div(c).w(style.kind_width).clip();

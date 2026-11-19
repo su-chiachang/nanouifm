@@ -70,7 +70,7 @@ test "a header click sorts, and a second click reverses" {
 
     try t.clickText("Name"); // already by name: descending
     t.settle(0.2);
-    try testing.expect(!m.focusedTab().sort.ascending);
+    try testing.expect(!m.focusedPane().sort.ascending);
     try testing.expect(try ts.textY(&t, "file10.txt") < try ts.textY(&t, "file2.txt"));
     try testing.expect(try ts.textY(&t, "projects") < try ts.textY(&t, "docs")); // folders still first
     try testing.expect(try ts.textY(&t, "docs") < try ts.textY(&t, "small.md"));
@@ -80,8 +80,8 @@ test "a header click sorts, and a second click reverses" {
 
     try t.clickText("Size"); // ascending by size: 10, 20, 30, 5000 bytes
     t.settle(0.2);
-    try testing.expectEqual(@import("../core/lister.zig").SortKey.size, m.focusedTab().sort.key);
-    try testing.expect(m.focusedTab().sort.ascending);
+    try testing.expectEqual(@import("../core/lister.zig").SortKey.size, m.focusedPane().sort.key);
+    try testing.expect(m.focusedPane().sort.ascending);
     try testing.expect(try ts.textY(&t, "small.md") < try ts.textY(&t, "file2.txt"));
     try testing.expect(try ts.textY(&t, "file10.txt") < try ts.textY(&t, "big.dat"));
     try t.clickText("Size");

@@ -83,3 +83,89 @@ pub fn clickTextWith(t: *ui.Tester, s: []const u8, mods: struct { cmd: bool = fa
     t.click(r.x + r.w / 2, r.y + r.h / 2);
     t.setMods(.{});
 }
+
+/// A model starting in the fixture's root (also its home), with `favorites` in the sidebar.
+pub fn model(fx: *Fixture, favorites: []const app_view.Item) !app_view.State {
+    return app_view.State.init(testing.allocator, .{
+        .start_path = fx.root,
+        .home_path = fx.root,
+        .favorites = favorites,
+        .locations = &.{.{ .path = "/", .title = "Volume" }},
+    });
+}
+
+const Rect = @import("pane_sizes.zig").Rect;
+
+/// Where pane `index` is in the last frame's layout (window points).
+pub fn paneRect(t: *ui.Tester, m: *app_view.State, index: usize) !Rect {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const fr = try @import("panes_view.zig").frame(arena.allocator(), m, t.size);
+    return fr.panes[index].rect;
+}
+
+/// The tab strip of a pane at `r`.
+pub fn stripOf(r: Rect) Rect {
+    return .{ .x = r.x, .y = r.y, .w = r.w, .h = @import("style.zig").tab_strip_height };
+}
+
+/// The rectangle of text `s` drawn inside `r` (the same text in other panes is skipped).
+pub fn findTextIn(t: *ui.Tester, r: Rect, s: []const u8) ?ui.Rect {
+    for (t.ctx.nodes.items) |n| switch (n.content) {
+        .text => |tx| if (std.mem.eql(u8, tx.str, s) and r.contains(n.rect.x + n.rect.w / 2, n.rect.y + n.rect.h / 2)) return n.rect,
+        else => {},
+    };
+    return null;
+}
+
+pub fn clickTextIn(t: *ui.Tester, r: Rect, s: []const u8) !void {
+    const f = findTextIn(t, r, s) orelse return error.TextNotFound;
+    t.click(f.x + f.w / 2, f.y + f.h / 2);
+}
+
+pub fn clickIconIn(t: *ui.Tester, r: Rect, symbol: []const u8) !void {
+    for (t.ctx.nodes.items) |n| switch (n.content) {
+        .icon => |ic| if (std.mem.eql(u8, ic.name, symbol) and r.contains(n.rect.x + n.rect.w / 2, n.rect.y + n.rect.h / 2)) {
+            t.click(n.rect.x + n.rect.w / 2, n.rect.y + n.rect.h / 2);
+            return;
+        },
+        else => {},
+    };
+    return error.IconNotFound;
+}
+
+/// The middle of `r`.
+pub fn center(r: Rect) struct { x: f32, y: f32 } {
+    return .{ .x = r.x + r.w / 2, .y = r.y + r.h / 2 };
+}
+
+/// Divider `index` of the last frame's layout (window points).
+pub fn dividerRect(t: *ui.Tester, m: *app_view.State, index: usize) !Rect {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const fr = try @import("panes_view.zig").frame(arena.allocator(), m, t.size);
+    return fr.dividers[index].rect;
+}
+
+/// The model's invariants: `panes` is the layout's leaves in reading order, the weights have one
+/// list per split, and the focus is a pane.
+pub fn expectInSync(m: *app_view.State) !void {
+    const leaves = try m.layout.leaves(testing.allocator);
+    defer testing.allocator.free(leaves);
+    try testing.expectEqual(leaves.len, m.panes.items.len);
+    for (leaves, m.panes.items) |id, p| try testing.expectEqual(id, p.id);
+    var splits: usize = 0;
+    try countSplits(&m.layout, &splits);
+    try testing.expectEqual(splits, m.sizes.weights.items.len);
+    try testing.expect(m.focused < m.panes.items.len);
+}
+
+fn countSplits(node: *const @import("pane_sizes.zig").Tree, n: *usize) !void {
+    switch (node.*) {
+        .leaf => {},
+        .split => |s| {
+            n.* += 1;
+            for (s.children) |*c| try countSplits(c, n);
+        },
+    }
+}

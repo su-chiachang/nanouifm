@@ -9,7 +9,7 @@ const style = @import("style.zig");
 pub fn view(c: *ui.Context, m: *Model) void {
     const th = c.theme;
     // Painted over the window; the pane's own tint lets the window show through.
-    const pane = ui.div(c).absolute().offset(0, 0).column().w(style.sidebar_width).h(c.size.h).pt(style.toolbar_height).pb(8).px(10)
+    const pane = ui.div(c).absolute().offset(0, 0).column().w(style.sidebar_width).h(c.size.h).pt(style.tab_strip_height + 10).pb(8).px(10)
         .glass(.{ .style = .sidebar, .tint = th.background.alpha(0.55) });
     defer pane.end();
     const here = m.sidebar.highlighted(m.focusedTab().path());
@@ -20,7 +20,10 @@ pub fn view(c: *ui.Context, m: *Model) void {
         for (sec.rows.items, 0..) |row, ri| {
             const selected = if (here) |h| h.section == si and h.row == ri else false;
             ui.key(c, c.print("sidebar-{d}-{d}", .{ si, ri }));
-            if (rowView(c, row.icon, row.title, selected)) m.queue(.{ .open = row.path }) catch {};
+            if (rowView(c, row.icon, row.title, selected)) {
+                // A click goes to the focused pane; Cmd-click opens a new tab there.
+                if (c.input.cmd) style.post(c, m, .{ .open_in_new_tab = row.path }) else style.post(c, m, .{ .open = row.path });
+            }
         }
     }
 }

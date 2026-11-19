@@ -1,11 +1,11 @@
 //! The path bar at the bottom of a pane: breadcrumbs of the folder (from Home when inside it,
 //! else from the volume root), with the item count beside them. A click on a crumb queues
-//! navigation to it.
+//! navigation of the pane to it.
 const std = @import("std");
 const nanoui = @import("nanoui");
 const ui = nanoui.ui;
 const Model = @import("model.zig").Model;
-const Tab = @import("tab.zig").Tab;
+const Pane = @import("pane.zig").Pane;
 const style = @import("style.zig");
 
 pub const Crumb = struct {
@@ -44,14 +44,16 @@ fn push(out: *[max_crumbs]Crumb, n: *usize, cr: Crumb) void {
     n.* += 1;
 }
 
-pub fn view(c: *ui.Context, m: *Model, tab: *const Tab) void {
+/// `w` is the pane's width: it decides how many crumbs fit.
+pub fn view(c: *ui.Context, m: *Model, pane: *Pane, w: f32) void {
     const th = c.theme;
+    const tab = pane.tab();
     const bar = ui.div(c).row().wFull().h(style.path_bar_height).px(style.pad).gap(2).itemsCenter().bg(th.surface);
     defer bar.end();
     var buf: [max_crumbs]Crumb = undefined;
     const chain = crumbs(&buf, m.home, tab.path());
     // Room for about this many crumbs beside the count; the middle ones collapse into "…".
-    const room: usize = @max(3, @as(usize, @intFromFloat(@max(0, c.size.w - style.sidebar_width - 180) / 96)));
+    const room: usize = @max(3, @as(usize, @intFromFloat(@max(0, w - 180) / 96)));
     const collapse = chain.len > room;
     for (chain, 0..) |cr, i| {
         const last = i + 1 == chain.len;
@@ -73,8 +75,8 @@ pub fn view(c: *ui.Context, m: *Model, tab: *const Tab) void {
         ui.text(c, cr.name, .{ .size = 12, .weight = if (last) .semibold else .regular, .color = if (last) th.text else th.muted, .truncate = .ellipsis });
         const it = b.interaction();
         if (it.clicked) {
-            c.changed = true;
-            m.queue(.{ .open = cr.path }) catch {};
+            style.post(c, m, .{ .focus_pane = pane.id });
+            style.post(c, m, .{ .open = cr.path });
         }
     }
     ui.spacer(c);

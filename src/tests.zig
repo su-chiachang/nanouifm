@@ -6,5 +6,10 @@ test {
     _ = @import("ui/format.zig");
     _ = @import("ui/sidebar_model.zig");
     _ = @import("ui/path_bar.zig");
+    _ = @import("ui/pane_sizes.zig");
+    _ = @import("ui/tab_strip.zig");
     _ = @import("ui/tests.zig");
+    _ = @import("ui/tests_tabs.zig");
+    _ = @import("ui/tests_split.zig");
+    _ = @import("ui/tests_snapshot.zig");
 }

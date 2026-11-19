@@ -1,10 +1,13 @@
 //! The real thing behind `Hooks`: the system pasteboard (file URLs, text), Finder, and the
-//! keyboard's Option state, through nanoui's `clipboard` / `shell` and `objc.msg`. For main.zig
+//! keyboard's Option state, Quick Look, thumbnails and the share sheet (the `system_*.zig` files), through nanoui's `clipboard` / `shell` and `objc.msg`. For main.zig
 //! only: the model's hooks are empty unless `Config` names these, so no test touches any of it.
 const std = @import("std");
 const nanoui = @import("nanoui");
 const objc = nanoui.objc;
 const Hooks = @import("hooks.zig").Hooks;
+const system_quick_look = @import("system_quick_look.zig");
+const system_thumbs = @import("system_thumbs.zig");
+const system_share = @import("system_share.zig");
 
 pub const hooks: Hooks = .{
     .copy_files = copyFiles,
@@ -14,6 +17,9 @@ pub const hooks: Hooks = .{
     .change_count = nanoui.clipboard.changeCount,
     .option_held = optionHeld,
     .app_role = appRole,
+    .quick_look = system_quick_look.hook,
+    .share = system_share.share,
+    .thumbnail = system_thumbs.provider,
 };
 
 /// An NSArray of NSURLs for `paths`.

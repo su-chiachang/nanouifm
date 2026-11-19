@@ -35,11 +35,12 @@ const static = [_]Command{
     .{ .id = .file_open_down, .title = "Open", .category = .file, .shortcut = .{ .key = S.down, .cmd = true }, .file_scope = true, .in_palette = false, .in_menu = false, .enabled = impl.hasSelection, .run = impl.open },
     .{ .id = .file_open_new_tab, .title = "Open in New Tab", .category = .file, .symbol = "plus.rectangle.on.rectangle", .enabled = impl.hasFolderTarget, .run = impl.openNewTab },
     .{ .id = .file_open_split, .title = "Open in Split", .category = .file, .symbol = "rectangle.split.2x1", .enabled = impl.hasFolderTarget, .run = impl.openSplit },
-    // A stub until Quick Look lands: listed, never enabled.
-    .{ .id = .file_quick_look, .title = "Quick Look", .category = .file, .shortcut = .{ .key = 'y', .cmd = true }, .symbol = "eye", .enabled = impl.never, .run = impl.open },
+    .{ .id = .file_quick_look, .title = "Quick Look", .category = .file, .shortcut = .{ .key = 'y', .cmd = true }, .symbol = "eye", .file_scope = true, .enabled = impl.canQuickLook, .run = impl.quickLook },
+    .{ .id = .file_quick_look_space, .title = "Quick Look", .category = .file, .shortcut = .{ .key = ' ' }, .file_scope = true, .in_palette = false, .in_menu = false, .enabled = impl.canQuickLook, .run = impl.quickLook },
     .{ .id = .file_rename, .title = "Rename", .category = .file, .shortcut = .{ .key = S.enter }, .symbol = "pencil", .file_scope = true, .enabled = impl.hasSingle, .run = impl.beginRename },
     .{ .id = .file_duplicate, .title = "Duplicate", .category = .file, .symbol = "plus.square.on.square", .file_scope = true, .enabled = impl.hasSelection, .run = impl.duplicate },
     .{ .id = .file_trash, .title = "Move to Trash", .category = .file, .shortcut = .{ .key = S.backspace, .cmd = true }, .symbol = "trash", .file_scope = true, .enabled = impl.hasSelection, .run = impl.trash },
+    .{ .id = .file_share, .title = "Share\u{2026}", .category = .file, .symbol = "square.and.arrow.up", .file_scope = true, .in_menu = false, .enabled = impl.hasSelection, .run = impl.share },
     .{ .id = .file_reveal, .title = "Reveal in Finder", .category = .file, .symbol = "magnifyingglass", .run = impl.reveal },
     .{ .id = .file_copy_path, .title = "Copy Path", .category = .file, .shortcut = .{ .key = 'c', .cmd = true, .alt = true }, .symbol = "doc.on.clipboard", .file_scope = true, .run = impl.copyPath },
     .{ .id = .file_pin, .title = "Pin to Sidebar", .category = .file, .shortcut = .{ .key = 't', .cmd = true, .ctrl = true }, .symbol = "pin", .enabled = impl.canPin, .run = impl.pin },
@@ -65,6 +66,7 @@ const static = [_]Command{
     .{ .id = .sort_folders_first, .title = "Sort Folders First", .category = .view, .checked = impl.foldersFirst, .run = impl.toggleFoldersFirst },
     .{ .id = .view_hidden, .title = "Show Hidden Files", .category = .view, .shortcut = .{ .key = '.', .cmd = true, .shift = true }, .symbol = "eye.slash", .checked = impl.showsHidden, .run = impl.toggleHidden },
     .{ .id = .view_sidebar, .title = "Toggle Sidebar", .category = .view, .shortcut = .{ .key = 's', .cmd = true, .ctrl = true }, .symbol = "sidebar.left", .dynamic_title = impl.sidebarTitle, .run = impl.toggleSidebar },
+    .{ .id = .view_inspector, .title = "Show Inspector", .category = .view, .shortcut = .{ .key = 'i', .cmd = true, .alt = true }, .symbol = "sidebar.right", .dynamic_title = impl.inspectorTitle, .run = impl.toggleInspector },
     .{ .id = .view_split_side, .title = "Split Side by Side", .category = .view, .shortcut = .{ .key = 'd', .cmd = true }, .symbol = "rectangle.split.2x1", .run = impl.splitSide },
     .{ .id = .view_split_stacked, .title = "Split Stacked", .category = .view, .shortcut = .{ .key = 'd', .cmd = true, .shift = true }, .symbol = "rectangle.split.1x2", .run = impl.splitStacked },
     // Cmd+K toggles; picking it from the palette itself would only reopen it.

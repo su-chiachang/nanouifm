@@ -11,6 +11,11 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .imports = &.{.{ .name = "nanoui", .module = nanoui }},
     }) });
+    // Quick Look's panel (QuickLookUI) and the thumbnail generator (QuickLookThumbnailing): nanoui
+    // links the other frameworks, these two are the app's own.
+    if (target.result.os.tag == .macos) {
+        for ([_][]const u8{ "QuickLookUI", "QuickLookThumbnailing" }) |f| exe.root_module.linkFramework(f, .{});
+    }
     // A window of its own on Windows, without a console window beside it.
     if (target.result.os.tag == .windows) exe.subsystem = .windows;
     b.installArtifact(exe);
@@ -27,6 +32,9 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .imports = &.{.{ .name = "nanoui", .module = nanoui }},
     }) });
+    if (target.result.os.tag == .macos) {
+        for ([_][]const u8{ "QuickLookUI", "QuickLookThumbnailing" }) |f| tests.root_module.linkFramework(f, .{});
+    }
     b.step("test", "Run the tests").dependOn(&b.addRunArtifact(tests).step);
 
     // Core (no UI) tests: `zig build test-core -Dcore=lister` tests src/core/lister.zig alone;

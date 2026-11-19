@@ -19,6 +19,7 @@ const palette_view = @import("ui/palette_view.zig");
 const persist = @import("ui/persist.zig");
 const sidebar_menu = @import("ui/sidebar_menu.zig");
 const sidebar_dnd = @import("ui/sidebar_dnd.zig");
+const quick_look = @import("ui/quick_look.zig");
 
 pub const State = model.Model;
 pub const Config = model.Config;
@@ -30,11 +31,13 @@ pub fn view(m: *State, c: *ui.Context) void {
     m.watch.setWaker(c.waker);
     m.view_state.palette.index.setWaker(c.waker);
     m.vol_signal.waker = c.waker;
+    m.preview.thumbs.setWaker(c.waker);
     m.waker = c.waker;
     m.clock = c.time;
     m.text_focus = c.focus_is_text;
     const applied = m.applyPending() catch false;
     if (applied) m.menu.refresh(); // the menu bar follows what the actions changed
+    quick_look.sync(m); // an open Quick Look panel follows the selection
     // With a menu bar its key equivalents take the command keys; while a text field has the
     // keyboard they are held back so the field gets them (see ui/menu_link.zig).
     if (m.menu.installed) ui.suspendMenuKeyEquivalents(c.focus_is_text);

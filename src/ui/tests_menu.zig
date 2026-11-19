@@ -53,15 +53,16 @@ test "every command the registry lists in the menu appears exactly once" {
     var counts: [menu_link.count]u8 = @splat(0);
     walk(bar, &counts);
     for (&commands.all) |*c| try testing.expectEqual(@as(u8, if (c.in_menu) 1 else 0), counts[@backingInt(c.id)]);
-    // The one command left out is Open's second key, Cmd+Down.
+    // The commands left out are the second keys (Open's Cmd+Down, Quick Look's Space) and Share,
+    // which the inspector, the palette and the context menu have.
     var left_out: usize = 0;
     for (&commands.all) |*c| {
         if (!c.in_menu) {
             left_out += 1;
-            try testing.expect(c.id == .file_open_down);
+            try testing.expect(c.id == .file_open_down or c.id == .file_quick_look_space or c.id == .file_share);
         }
     }
-    try testing.expectEqual(@as(usize, 1), left_out);
+    try testing.expectEqual(@as(usize, 3), left_out);
     // The bar: the App role, then File, Edit, View, Go, and the Window role.
     try testing.expectEqual(@as(usize, 6), bar.len);
     try testing.expect(bar[0].role.? == .app_menu and bar[5].role.? == .window_menu);
@@ -161,7 +162,7 @@ test "the template follows the model: Show Hidden ticks, Undo and Redo name what
         try testing.expect(undo.disabled and find(bar, "edit_redo").?.disabled);
         try testing.expect(!find(bar, "view_hidden").?.checked);
         try testing.expect(find(bar, "file_rename").?.disabled); // nothing selected
-        try testing.expect(find(bar, "file_quick_look").?.disabled); // a stub until Quick Look
+        try testing.expect(find(bar, "file_quick_look").?.disabled); // nothing selected
         try testing.expect(!find(bar, "file_new_folder").?.disabled);
         try testing.expectEqualStrings("Hide Sidebar", find(bar, "view_sidebar").?.label);
     }

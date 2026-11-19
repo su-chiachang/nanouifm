@@ -12,6 +12,9 @@ pub const Id = enum {
     file_open_new_tab,
     file_open_split,
     file_quick_look,
+    /// Space: Quick Look's twin key (a bare key, so it is left to the view).
+    file_quick_look_space,
+    file_share,
     file_rename,
     file_duplicate,
     file_trash,
@@ -40,6 +43,7 @@ pub const Id = enum {
     sort_folders_first,
     view_hidden,
     view_sidebar,
+    view_inspector,
     view_split_side,
     view_split_stacked,
     palette_show,

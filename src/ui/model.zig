@@ -50,6 +50,7 @@ const sidebar_ops = @import("sidebar_ops.zig");
 const menu_link = @import("menu_link.zig");
 const state_model = @import("../core/state_model.zig");
 const sidebar_menu = @import("sidebar_menu.zig");
+const preview_state = @import("preview_state.zig");
 
 pub const Item = sidebar_model.Item;
 pub const LayoutTree = pane_sizes.Tree;
@@ -287,6 +288,8 @@ pub const Model = struct {
     menu: menu_link.State = .{},
     /// A text field had the keyboard in the last frame: file commands from the menu wait.
     text_focus: bool = false,
+    /// Thumbnails, picture sizes and Quick Look's bookkeeping (`preview_state.zig`).
+    preview: preview_state.State,
 
     pub fn init(gpa: Allocator, cfg: Config) Allocator.Error!Model {
         const home = try normalize(gpa, cfg.home_path);
@@ -300,7 +303,9 @@ pub const Model = struct {
         defer gpa.free(start);
         var pane = try Pane.init(gpa, start, .{ .show_hidden = cfg.show_hidden }, .{ .pane = 1, .tab = 2 });
         errdefer pane.deinit();
-        var m: Model = .{ .gpa = gpa, .home = home, .sidebar = sb, .show_hidden = cfg.show_hidden, .layout = .{ .leaf = pane.id }, .next_id = 3, .opener = cfg.opener, .ops = file_ops.FileOperationService.init(gpa), .clip = Clipboard.init(gpa), .hooks = cfg.hooks, .watch = watch.Watchers.init(gpa, cfg.watch), .volumes = cfg.volumes, .vol_signal = signal };
+        var pv = try preview_state.State.init(gpa);
+        errdefer pv.deinit(gpa);
+        var m: Model = .{ .preview = pv, .gpa = gpa, .home = home, .sidebar = sb, .show_hidden = cfg.show_hidden, .layout = .{ .leaf = pane.id }, .next_id = 3, .opener = cfg.opener, .ops = file_ops.FileOperationService.init(gpa), .clip = Clipboard.init(gpa), .hooks = cfg.hooks, .watch = watch.Watchers.init(gpa, cfg.watch), .volumes = cfg.volumes, .vol_signal = signal };
         errdefer m.ops.deinit();
         errdefer m.clip.deinit();
         errdefer m.watch.deinit();
@@ -337,6 +342,7 @@ pub const Model = struct {
         self.layout.deinit(self.gpa);
         self.sizes.deinit(self.gpa);
         self.persist.deinit(self.gpa);
+        self.preview.deinit(self.gpa);
         self.gpa.destroy(self.vol_signal);
         self.sidebar.deinit();
         self.gpa.free(self.home);
@@ -390,6 +396,7 @@ pub const Model = struct {
     pub fn applyPending(self: *Model) Allocator.Error!bool {
         self.freeRetired();
         self.view_state.palette.freeRetired();
+        _ = self.preview.thumbs.merge(); // thumbnails that arrived since the last pass
         if (self.vol_signal.take()) try sidebar_ops.refreshVolumes(self); // a mount, an unmount, a rename
         try nav_ops.syncColumns(self); // the shown tabs of column-view panes match their folders
         var changed = try self.watch.refreshDirty(self); // folders that changed on disk

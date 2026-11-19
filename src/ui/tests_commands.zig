@@ -64,7 +64,7 @@ test "enabled states follow the selection, the clipboard and the undo stack" {
 
     try env.click("a.txt");
     for ([_]commands.Id{ .file_open, .file_rename, .file_duplicate, .file_trash, .edit_copy }) |id| try testing.expect(enabled(&env, id));
-    try testing.expect(!enabled(&env, .file_quick_look)); // a stub: never
+    try testing.expect(enabled(&env, .file_quick_look)); // something is selected
     try testing.expect(!enabled(&env, .file_open_new_tab) and !enabled(&env, .file_pin)); // a file
     try ts.clickTextWith(&env.t, "b.txt", .{ .shift = true });
     try testing.expect(!enabled(&env, .file_rename)); // two items

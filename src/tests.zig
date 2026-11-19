@@ -28,13 +28,26 @@ test {
     _ = @import("ui/tests_persist.zig");
     _ = @import("ui/tests_menu.zig");
     _ = @import("ui/tests_sidebar.zig");
+    _ = @import("ui/tests_preview.zig");
+    _ = @import("ui/tests_quick_look.zig");
+    _ = @import("ui/tests_path_bar.zig");
+    _ = @import("ui/image_info.zig");
+    _ = @import("ui/thumbs.zig");
+    _ = @import("ui/inspector_info.zig");
     // The menu bar and the real volumes are only ever wired by main.zig: compiled, never run.
     std.testing.refAllDecls(@import("ui/menu_bar.zig"));
     std.testing.refAllDecls(@import("ui/system_volumes.zig"));
+    // Quick Look's panel, thumbnails and the share sheet: compiled and linked, never run.
+    std.testing.refAllDecls(@import("ui/system_hooks.zig"));
+    std.testing.refAllDecls(@import("ui/system_quick_look.zig"));
+    std.testing.refAllDecls(@import("ui/system_thumbs.zig"));
+    std.testing.refAllDecls(@import("ui/system_share.zig"));
+    std.testing.refAllDecls(@import("ui/cg_pixels.zig"));
     _ = @import("ui/tests_snapshot.zig");
     _ = @import("ui/tests_snapshot_ops.zig");
     _ = @import("ui/tests_snapshot_palette.zig");
     _ = @import("ui/tests_snapshot_sidebar.zig");
+    _ = @import("ui/tests_snapshot_inspector.zig");
     _ = @import("ui/typeahead.zig");
     _ = @import("ui/column_model.zig");
 }

@@ -15,7 +15,7 @@ const style = @import("style.zig");
 const toolbar_menu = @import("toolbar_menu.zig");
 
 /// What a pane `w` points wide has room for: the row gives up the folder's name, Up, Back and
-/// Forward, then "+" (New Folder is in the "..." menu too), as the pane narrows, and keeps Sort,
+/// Forward, then the inspector's toggle and "+" (New Folder is in the "..." menu too), as the pane narrows, and keeps Sort,
 /// the filter field and "...". The numbers are the buttons' widths (30), the gaps (4) and the
 /// row's padding (24): all of it takes 232 points and the field, the name gets what is left.
 const Tier = struct {
@@ -23,15 +23,18 @@ const Tier = struct {
     up: bool,
     title: bool,
     plus: bool,
+    /// The inspector's toggle, at the far right (the shortcut and the menus still have it).
+    inspector: bool,
     /// The filter field's width.
     filter: f32,
 
     fn of(w: f32) Tier {
-        if (w >= 520) return .{ .nav = true, .up = true, .title = true, .plus = true, .filter = 150 };
-        if (w >= 330) return .{ .nav = true, .up = true, .title = false, .plus = true, .filter = std.math.clamp(w - 228, 100, 160) };
-        if (w >= 280) return .{ .nav = true, .up = false, .title = false, .plus = true, .filter = std.math.clamp(w - 194, 86, 130) };
-        if (w >= 200) return .{ .nav = false, .up = false, .title = false, .plus = true, .filter = w - 126 };
-        return .{ .nav = false, .up = false, .title = false, .plus = false, .filter = @max(60, w - 92) };
+        if (w >= 560) return .{ .nav = true, .up = true, .title = true, .plus = true, .inspector = true, .filter = 150 };
+        if (w >= 364) return .{ .nav = true, .up = true, .title = false, .plus = true, .inspector = true, .filter = std.math.clamp(w - 262, 100, 160) };
+        if (w >= 330) return .{ .nav = true, .up = true, .title = false, .plus = true, .inspector = false, .filter = std.math.clamp(w - 228, 100, 160) };
+        if (w >= 280) return .{ .nav = true, .up = false, .title = false, .plus = true, .inspector = false, .filter = std.math.clamp(w - 194, 86, 130) };
+        if (w >= 200) return .{ .nav = false, .up = false, .title = false, .plus = true, .inspector = false, .filter = w - 126 };
+        return .{ .nav = false, .up = false, .title = false, .plus = false, .inspector = false, .filter = @max(60, w - 92) };
     }
 };
 
@@ -60,6 +63,9 @@ pub fn view(c: *ui.Context, m: *Model, pane: *Pane, w: f32) void {
     toolbar_menu.button(c, m, pane.id, .more, "more", "ellipsis", false);
     if (tier.plus and style.iconButton(c, "new-folder", "folder.badge.plus", true, false)) {
         act(c, m, pane, .{ .run_command = .file_new_folder });
+    }
+    if (tier.inspector and style.iconButton(c, "inspector", "sidebar.right", true, pane.inspector)) {
+        act(c, m, pane, .{ .run_command = .view_inspector });
     }
 }
 

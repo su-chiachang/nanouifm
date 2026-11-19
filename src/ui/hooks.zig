@@ -3,10 +3,25 @@
 //! clipboard, the pasteboard, Finder or the keyboard state: tests install recorders or nothing.
 //! (The file opener is the same idea and lives in `opener.zig`.)
 const std = @import("std");
+const thumbs = @import("thumbs.zig");
+const image_info = @import("image_info.zig");
 
 /// The app-level chords a menu bar owns but a focused text field holds back (see `menu_link.zig`):
 /// the view runs them itself, through `Hooks.app_role`.
 pub const AppRole = enum { quit, hide, hide_others, minimize };
+
+/// Where a button is in the window (points, top left origin): what a share sheet hangs from.
+pub const Anchor = struct { x: f32, y: f32, w: f32, h: f32 };
+
+/// The system's Quick Look panel (`system_quick_look.zig`). Tests install a recorder.
+pub const QuickLook = struct {
+    /// Shows the panel on `paths` (the selection, in row order), or hides it if it is up.
+    toggle: *const fn (paths: []const []const u8) void,
+    /// The panel is up: it should show `paths` now (the selection changed).
+    update: *const fn (paths: []const []const u8) void,
+    /// Whether the panel is on screen (the user may have closed it with its own button).
+    is_open: *const fn () bool,
+};
 
 pub const Hooks = struct {
     /// Puts copied files on the system pasteboard as file URLs (Copy), so Finder and other apps
@@ -28,6 +43,17 @@ pub const Hooks = struct {
     /// Quit, Hide, Hide Others and Minimize, the way the App and Window menus do them. Only needed
     /// while a text field has the keyboard and the menu bar's key equivalents are held back.
     app_role: ?*const fn (role: AppRole) void = null,
+    /// Quick Look (Space, Cmd+Y). Null: the command does nothing.
+    quick_look: ?QuickLook = null,
+    /// The share sheet for these files, hanging from the Share button. Null: a notice says
+    /// sharing is not available.
+    share: ?*const fn (paths: []const []const u8, anchor: Anchor) void = null,
+    /// Thumbnails for the inspector's preview, made asynchronously (see `thumbs.zig`). Null: the
+    /// file's icon is all the preview there is.
+    thumbnail: ?thumbs.Provider = null,
+    /// A picture's size in pixels for the inspector's Resolution row: by default its header is
+    /// read from the file (a PNG, JPEG or GIF).
+    image_size: image_info.ReadFn = image_info.fromFile,
 
     pub fn freePaths(gpa: std.mem.Allocator, paths: [][]u8) void {
         for (paths) |p| gpa.free(p);

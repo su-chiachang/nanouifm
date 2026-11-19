@@ -34,6 +34,12 @@ pub const Fixture = struct {
         try self.tmp.dir.writeFile(testing.io, .{ .sub_path = rel, .data = data });
     }
 
+    /// A file of exactly `data` at `rel` (folders made as needed).
+    pub fn bytes(self: *Fixture, rel: []const u8, data: []const u8) !void {
+        if (std.fs.path.dirname(rel)) |d| try self.tmp.dir.createDirPath(testing.io, d);
+        try self.tmp.dir.writeFile(testing.io, .{ .sub_path = rel, .data = data });
+    }
+
     /// Whether `rel` exists under the temp folder.
     pub fn exists(self: *const Fixture, rel: []const u8) bool {
         self.tmp.dir.access(testing.io, rel, .{}) catch return false;

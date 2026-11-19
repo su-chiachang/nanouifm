@@ -52,9 +52,8 @@ test "right-click on an unselected row selects it and offers the item menu" {
     try testing.expect(env.t.hasText("\u{2318}\u{232B}") and env.t.hasText("\u{21E7}\u{2318}N"));
     // A file isn't a folder: no tab, split or pin for it.
     try testing.expect(!commands.isEnabled(&env.m, commands.find(.file_open_new_tab)));
-    // Quick Look is a stub: choosing it does nothing and the menu stays.
-    try choose(&env, "Quick Look");
-    try testing.expect(env.m.view_state.ctx_menu.open);
+    // Quick Look applies to the selected file (its hook is tested in tests_preview.zig).
+    try testing.expect(commands.isEnabled(&env.m, commands.find(.file_quick_look)));
     // Open acts on the selection: the injected opener gets the file.
     try choose(&env, "Open");
     try testing.expect(!env.m.view_state.ctx_menu.open);

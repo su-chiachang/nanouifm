@@ -17,6 +17,8 @@ const goto = @import("goto.zig");
 const filter_ops = @import("filter_ops.zig");
 const palette_ops = @import("palette_ops.zig");
 const sidebar_ops = @import("sidebar_ops.zig");
+const quick_look = @import("quick_look.zig");
+const inspector_ops = @import("inspector_ops.zig");
 const Pred = @import("command.zig").Pred;
 
 // ---- predicates ----
@@ -56,8 +58,12 @@ pub fn canPaste(m: *Model) bool {
     return m.canPaste();
 }
 
-pub fn never(_: *Model) bool {
-    return false;
+pub fn canQuickLook(m: *Model) bool {
+    return quick_look.canRun(m);
+}
+
+pub fn inspectorTitle(m: *Model, _: []u8) []const u8 {
+    return if (inspector_ops.isOn(m)) "Hide Inspector" else "Show Inspector";
 }
 
 pub fn manyPanes(m: *Model) bool {
@@ -176,6 +182,15 @@ pub fn pin(m: *Model) Allocator.Error!void {
 }
 pub fn addFavorite(m: *Model) Allocator.Error!void {
     return sidebar_ops.addFavorite(m);
+}
+pub fn quickLook(m: *Model) Allocator.Error!void {
+    return quick_look.toggle(m);
+}
+pub fn share(m: *Model) Allocator.Error!void {
+    return inspector_ops.share(m);
+}
+pub fn toggleInspector(m: *Model) Allocator.Error!void {
+    return inspector_ops.toggle(m);
 }
 pub fn toggleSidebar(m: *Model) Allocator.Error!void {
     m.sidebar_visible = !m.sidebar_visible;

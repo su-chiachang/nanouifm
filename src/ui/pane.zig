@@ -22,6 +22,9 @@ pub const Pane = struct {
     view_mode: ViewMode = .list,
     /// The toolbar's name filter: its field's text, and where it was applied (see `filter.zig`).
     filter: Filter = .{},
+    /// The inspector (the preview and details of the selection) is shown beside the list (Opt+Cmd+I).
+    /// Column view always has its trailing preview column; the flag is kept for when it goes back to a list.
+    inspector: bool = false,
 
     /// A pane with one tab in `folder`; `ids` are the pane's and its tab's.
     pub fn init(gpa: Allocator, folder: []const u8, o: Opts, ids: struct { pane: u32 = 0, tab: u32 = 0 }) Allocator.Error!Pane {

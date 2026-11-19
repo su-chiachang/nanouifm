@@ -44,6 +44,7 @@ const more_lines = [_]Line{
     .{ .id = .view_column },
     sep,
     .{ .id = .view_hidden },
+    .{ .id = .view_inspector },
     .{ .id = .file_new_folder },
     sep,
     .{ .id = .view_split_side },

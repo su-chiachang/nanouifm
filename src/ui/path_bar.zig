@@ -1,12 +1,14 @@
 //! The path bar at the bottom of a pane: breadcrumbs of the folder (from Home when inside it,
 //! else from the volume root), with the item count beside them. A click on a crumb queues
-//! navigation of the pane to it.
+//! navigation of the pane to it. A crumb is also a drop target: files dropped on it (from Finder,
+//! or dragged from a pane) move into that folder, a copy with Option, through `drops.zig`.
 const std = @import("std");
 const nanoui = @import("nanoui");
 const ui = nanoui.ui;
 const Model = @import("model.zig").Model;
 const Pane = @import("pane.zig").Pane;
 const style = @import("style.zig");
+const drops = @import("drops.zig");
 
 pub const Crumb = struct {
     /// The folder's path: a prefix of the path crumbs were made from.
@@ -74,6 +76,9 @@ pub fn view(c: *ui.Context, m: *Model, pane: *Pane, w: f32) void {
         });
         ui.text(c, cr.name, .{ .size = 12, .weight = if (last) .semibold else .regular, .color = if (last) th.text else th.muted, .truncate = .ellipsis });
         const it = b.interaction();
+        // Files dropped on a crumb go into that folder (a move; Option copies), as on a folder row.
+        drops.accept(c, m, b.index, cr.path);
+        if (drops.land(c, m, it.rect, cr.path)) c.node(b.index).style.background = th.accent.alpha(0.3);
         if (it.clicked) {
             style.post(c, m, .{ .focus_pane = pane.id });
             style.post(c, m, .{ .open = cr.path });

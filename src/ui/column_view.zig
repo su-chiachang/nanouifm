@@ -41,7 +41,7 @@ pub fn view(c: *ui.Context, m: *Model, pane: *Pane, focused: bool) void {
         ui.keyInt(c, depth);
         column(c, m, pane, col, depth, focused and depth == cs.active);
     }
-    if (preview_item) |it| preview.view(c, it);
+    if (preview_item) |it| preview.view(c, m, pane, it);
     // The room after the last column, so the strip always fills the pane.
     _ = c.leaf(.{ .grow = 1, .height = .fill }, .none, "rest");
 }

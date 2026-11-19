@@ -8,6 +8,7 @@ const menu_bar = @import("ui/menu_bar.zig");
 const system_volumes = @import("ui/system_volumes.zig");
 const opener = @import("ui/opener.zig");
 const system_hooks = @import("ui/system_hooks.zig");
+const system_quick_look = @import("ui/system_quick_look.zig");
 
 pub const panic = nanoui.panic;
 pub const std_options = nanoui.std_options;
@@ -65,6 +66,7 @@ fn run(init: nanoui.Init) !void {
         .index = .{ .roots = &.{ index_roots[0], index_roots[1], index_roots[2] } },
     });
     defer state.deinit();
+    system_quick_look.attach(&state); // the Quick Look panel's arrow keys move this model's selection
 
     // The native menu bar (generated from the command registry), and the volumes' notifications.
     const bar = try menu_bar.Bar.install(gpa, app, &state);

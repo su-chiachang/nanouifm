@@ -16,6 +16,8 @@ const column_view = @import("column_view.zig");
 const path_bar = @import("path_bar.zig");
 const drops = @import("drops.zig");
 const file_target = @import("file_target.zig");
+const inspector_view = @import("inspector_view.zig");
+const inspector_info = @import("inspector_info.zig");
 
 pub fn view(c: *ui.Context, m: *Model, index: usize, rect: pane_sizes.Rect, area: pane_sizes.Rect) void {
     const pane = &m.panes.items[index];
@@ -32,7 +34,7 @@ pub fn view(c: *ui.Context, m: *Model, index: usize, rect: pane_sizes.Rect, area
     toolbar.view(c, m, pane, rect.w);
     ui.divider(c);
     switch (pane.view_mode) {
-        .list => list_pane.view(c, m, pane, focused, rect.w),
+        .list => listBody(c, m, pane, focused, rect.w),
         .column => column_view.view(c, m, pane, focused),
     }
     ui.divider(c);
@@ -54,4 +56,20 @@ pub fn view(c: *ui.Context, m: *Model, index: usize, rect: pane_sizes.Rect, area
         const o = ui.div(c).absolute().offset(0, 0).size(rect.w, rect.h).border(th.accent).borderW(2);
         o.end();
     }
+}
+
+/// The list, with the inspector beside it when the pane has it on. The wrapper is there either
+/// way, so the list keeps its scroll position (and its ids) when the inspector comes and goes.
+fn listBody(c: *ui.Context, m: *Model, pane: *Pane, focused: bool, w: f32) void {
+    const iw: f32 = if (pane.inspector) inspector_info.panelWidth(w) else 0;
+    ui.key(c, "list-body");
+    const row = ui.div(c).row().wFull().grow().minW(0);
+    defer row.end();
+    {
+        ui.key(c, "list-col");
+        const left = ui.div(c).column().grow().minW(0).hFull();
+        defer left.end();
+        list_pane.view(c, m, pane, focused, w - iw);
+    }
+    if (pane.inspector) inspector_view.view(c, m, pane, iw);
 }

@@ -82,6 +82,29 @@ pub fn hasIcon(t: *ui.Tester, symbol: []const u8) bool {
     return false;
 }
 
+/// Clicks the lowest drawn text `s`: a menu's or a palette's row, not a column header, a field's
+/// typed words or a hint of the same name above it.
+pub fn clickLowestText(t: *ui.Tester, s: []const u8) !void {
+    var best: ?ui.Rect = null;
+    for (t.ctx.nodes.items) |n| switch (n.content) {
+        .text => |tx| if (std.mem.eql(u8, tx.str, s) and (best == null or n.rect.y > best.?.y)) {
+            best = n.rect;
+        },
+        else => {},
+    };
+    const r = best orelse return error.TextNotFound;
+    t.click(r.x + r.w / 2, r.y + r.h / 2);
+}
+
+/// Where the icon `symbol` drawn inside `r` is (window points).
+pub fn iconIn(t: *ui.Tester, r: @import("pane_sizes.zig").Rect, symbol: []const u8) ?ui.Rect {
+    for (t.ctx.nodes.items) |n| switch (n.content) {
+        .icon => |ic| if (std.mem.eql(u8, ic.name, symbol) and r.contains(n.rect.x + n.rect.w / 2, n.rect.y + n.rect.h / 2)) return n.rect,
+        else => {},
+    };
+    return null;
+}
+
 /// Clicks the middle of text `s` holding cmd and/or shift.
 pub fn clickTextWith(t: *ui.Tester, s: []const u8, mods: struct { cmd: bool = false, shift: bool = false }) !void {
     const r = t.findText(s) orelse return error.TextNotFound;
@@ -296,6 +319,28 @@ pub fn tree(fx: *Fixture) !void {
     try fx.file("dir/inner.txt", 5);
 }
 
+/// How a test's palette indexes: not at all (the default), at once on the calling thread, or each
+/// crawl held (`runHeld`) until the test lets it run. Never a thread, never the real home.
+pub const IndexMode = enum { off, now, held };
+
+const palette_index = @import("palette_index.zig");
+
+/// The crawl `hold` kept.
+pub var held_job: ?*palette_index.Job = null;
+
+fn hold(job: *palette_index.Job) void {
+    if (held_job) |old| old.run(); // (a newer crawl replaces an unrun one)
+    held_job = job;
+}
+
+/// Lets the held crawl run now; false when none was held.
+pub fn runHeld() bool {
+    const job = held_job orelse return false;
+    held_job = null;
+    job.run();
+    return true;
+}
+
 pub const Env = struct {
     fx: Fixture,
     m: app_view.State,
@@ -306,13 +351,25 @@ pub const Env = struct {
     }
 
     /// `init` with live refresh's bookkeeping on (`watch = .manual`: a test fires the changes)
-    /// and/or a sidebar favorite titled "Fav" for the folder `favorite` (under the root).
-    pub fn initWith(env: *Env, o: struct { watch: @import("watch.zig").Mode = .off, favorite: ?[]const u8 = null }) !void {
+    /// and/or a sidebar favorite titled "Fav" for the folder `favorite` (under the root), more
+    /// `files` in the temp tree, and the palette's file index (see `IndexMode`) over the folder
+    /// `index_rel` of the tree (default: all of it).
+    pub fn initWith(env: *Env, o: struct {
+        watch: @import("watch.zig").Mode = .off,
+        favorite: ?[]const u8 = null,
+        files: []const []const u8 = &.{},
+        index: IndexMode = .off,
+        index_rel: []const u8 = "",
+    }) !void {
         env.fx = try Fixture.init();
         errdefer env.fx.deinit();
         try tree(&env.fx);
+        for (o.files) |f| try env.fx.file(f, 7);
         const fav_path = if (o.favorite) |f| try env.fx.sub(f) else null;
         defer if (fav_path) |p| testing.allocator.free(p);
+        const index_root = try env.fx.sub(o.index_rel);
+        defer testing.allocator.free(index_root);
+        held_job = null;
         env.m = try app_view.State.init(testing.allocator, .{
             .start_path = env.fx.root,
             .home_path = env.fx.root,
@@ -321,6 +378,11 @@ pub const Env = struct {
             .opener = record,
             .hooks = test_hooks,
             .watch = o.watch,
+            .index = switch (o.index) {
+                .off => null,
+                .now => .{ .roots = &.{index_root}, .runner = palette_index.runNow },
+                .held => .{ .roots = &.{index_root}, .runner = hold },
+            },
         });
         errdefer env.m.deinit();
         resetHooks();
@@ -328,6 +390,7 @@ pub const Env = struct {
     }
 
     pub fn deinit(env: *Env) void {
+        _ = runHeld(); // a crawl nobody ran owns a share of the index
         env.t.deinit();
         env.m.deinit();
         env.fx.deinit();

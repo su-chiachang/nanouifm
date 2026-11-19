@@ -1,7 +1,7 @@
 //! THE command registry: one table of every command (id, title, category, shortcut, symbol,
-//! enabled / checked predicates, action). The keyboard (`command_keys.zig`) and the context menu
-//! run from it today; the menu bar and the command palette read the same table next, so a
-//! command added here appears everywhere with its shortcut and its enabled state.
+//! enabled / checked predicates, action). The keyboard (`command_keys.zig`), the context menu, the
+//! toolbar's menus and the command palette (`palette_rows.zig`) run from it, and the menu bar will,
+//! so a command added here appears everywhere with its shortcut and its enabled state.
 //!
 //!   for (commands.all) |*cmd| ...              // every command, in menu order
 //!   commands.find(.file_new_folder)            // one command
@@ -50,6 +50,7 @@ const static = [_]Command{
     .{ .id = .edit_paste, .title = "Paste", .category = .edit, .shortcut = .{ .key = 'v', .cmd = true }, .symbol = "doc.on.clipboard", .file_scope = true, .enabled = impl.canPaste, .run = impl.paste },
     .{ .id = .edit_paste_move, .title = "Move Items Here", .category = .edit, .shortcut = .{ .key = 'v', .cmd = true, .alt = true }, .file_scope = true, .enabled = impl.canPaste, .run = impl.pasteMove },
     .{ .id = .edit_select_all, .title = "Select All", .category = .edit, .shortcut = .{ .key = 'a', .cmd = true }, .file_scope = true, .run = impl.selectAll },
+    .{ .id = .filter_focus, .title = "Filter Folder", .category = .edit, .shortcut = .{ .key = 'f', .cmd = true }, .symbol = "magnifyingglass", .run = impl.focusFilter },
     // View
     .{ .id = .view_list, .title = "as List", .category = .view, .shortcut = .{ .key = '1', .cmd = true }, .symbol = "list.bullet", .checked = impl.isList, .run = impl.viewList },
     .{ .id = .view_column, .title = "as Columns", .category = .view, .shortcut = .{ .key = '2', .cmd = true }, .symbol = "rectangle.split.3x1", .checked = impl.isColumn, .run = impl.viewColumn },
@@ -57,9 +58,15 @@ const static = [_]Command{
     .{ .id = .sort_kind, .title = "Sort by Kind", .category = .view, .checked = impl.sortedBy(.kind), .run = impl.sort(.kind) },
     .{ .id = .sort_size, .title = "Sort by Size", .category = .view, .checked = impl.sortedBy(.size), .run = impl.sort(.size) },
     .{ .id = .sort_modified, .title = "Sort by Date Modified", .category = .view, .checked = impl.sortedBy(.modified), .run = impl.sort(.modified) },
+    .{ .id = .sort_created, .title = "Sort by Date Created", .category = .view, .checked = impl.sortedBy(.created), .run = impl.sort(.created) },
+    .{ .id = .sort_ascending, .title = "Sort Ascending", .category = .view, .checked = impl.isAscending, .run = impl.setAscending(true) },
+    .{ .id = .sort_descending, .title = "Sort Descending", .category = .view, .checked = impl.isDescending, .run = impl.setAscending(false) },
+    .{ .id = .sort_folders_first, .title = "Sort Folders First", .category = .view, .checked = impl.foldersFirst, .run = impl.toggleFoldersFirst },
     .{ .id = .view_hidden, .title = "Show Hidden Files", .category = .view, .shortcut = .{ .key = '.', .cmd = true, .shift = true }, .symbol = "eye.slash", .checked = impl.showsHidden, .run = impl.toggleHidden },
     .{ .id = .view_split_side, .title = "Split Side by Side", .category = .view, .shortcut = .{ .key = 'd', .cmd = true }, .symbol = "rectangle.split.2x1", .run = impl.splitSide },
     .{ .id = .view_split_stacked, .title = "Split Stacked", .category = .view, .shortcut = .{ .key = 'd', .cmd = true, .shift = true }, .symbol = "rectangle.split.1x2", .run = impl.splitStacked },
+    // Cmd+K toggles; picking it from the palette itself would only reopen it.
+    .{ .id = .palette_show, .title = "Command Palette\u{2026}", .category = .view, .shortcut = .{ .key = 'k', .cmd = true }, .symbol = "command", .in_palette = false, .run = impl.togglePalette },
 };
 
 const go = [_]Command{

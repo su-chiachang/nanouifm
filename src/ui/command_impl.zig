@@ -14,6 +14,8 @@ const tab_ops = @import("tab_ops.zig");
 const layout_ops = @import("layout_ops.zig");
 const nav_ops = @import("nav_ops.zig");
 const goto = @import("goto.zig");
+const filter_ops = @import("filter_ops.zig");
+const palette_ops = @import("palette_ops.zig");
 const Pred = @import("command.zig").Pred;
 
 // ---- predicates ----
@@ -91,6 +93,18 @@ pub fn sortedBy(comptime key: lister.SortKey) Pred {
             return m.focusedPane().sort.key == key;
         }
     }.f;
+}
+
+pub fn isAscending(m: *Model) bool {
+    return m.focusedPane().sort.ascending;
+}
+
+pub fn isDescending(m: *Model) bool {
+    return !m.focusedPane().sort.ascending;
+}
+
+pub fn foldersFirst(m: *Model) bool {
+    return m.focusedPane().sort.folders_first;
 }
 
 pub fn layoutIs(comptime preset: pane_layout.LayoutPreset) Pred {
@@ -185,6 +199,22 @@ pub fn sort(comptime key: lister.SortKey) *const fn (*Model) Allocator.Error!voi
             try m.focusedPane().sortBy(key, m.show_hidden);
         }
     }.f;
+}
+pub fn setAscending(comptime ascending: bool) *const fn (*Model) Allocator.Error!void {
+    return struct {
+        fn f(m: *Model) Allocator.Error!void {
+            try m.focusedPane().setAscending(ascending, m.show_hidden);
+        }
+    }.f;
+}
+pub fn toggleFoldersFirst(m: *Model) Allocator.Error!void {
+    try m.focusedPane().toggleFoldersFirst(m.show_hidden);
+}
+pub fn focusFilter(m: *Model) Allocator.Error!void {
+    filter_ops.focus(m);
+}
+pub fn togglePalette(m: *Model) Allocator.Error!void {
+    try palette_ops.toggle(m);
 }
 pub fn toggleHidden(m: *Model) Allocator.Error!void {
     return m.setShowHidden(!m.show_hidden);

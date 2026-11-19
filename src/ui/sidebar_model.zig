@@ -54,6 +54,8 @@ pub fn iconFor(kind: SectionKind, path: []const u8) []const u8 {
 pub const Sidebar = struct {
     gpa: Allocator,
     sections: [4]Section = .{ .{ .kind = .home }, .{ .kind = .favorites }, .{ .kind = .pinned }, .{ .kind = .locations } },
+    /// Moves whenever a row is added (a pin): the palette's file index follows the folders.
+    revision: u32 = 0,
 
     pub fn init(gpa: Allocator, home: []const u8, favorites: []const Item, pinned: []const Item, locations: []const Item) Allocator.Error!Sidebar {
         var s: Sidebar = .{ .gpa = gpa };
@@ -84,6 +86,7 @@ pub const Sidebar = struct {
         const title = try self.gpa.dupe(u8, name);
         errdefer self.gpa.free(title);
         try sec.rows.append(self.gpa, .{ .path = path, .title = title, .icon = iconFor(kind, it.path) });
+        self.revision +%= 1;
     }
 
     /// Pin to Sidebar: a Pinned row for `path`, unless Favorites or Pinned already has one.

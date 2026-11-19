@@ -38,6 +38,12 @@ const context_menu = @import("context_menu.zig");
 const commands = @import("commands.zig");
 const file_actions = @import("file_actions.zig");
 const CommandId = @import("command_id.zig").Id;
+const palette_model = @import("palette_model.zig");
+const palette_index = @import("palette_index.zig");
+const palette_exec = @import("palette_exec.zig");
+const palette_ops = @import("palette_ops.zig");
+const filter_ops = @import("filter_ops.zig");
+const toolbar_menu = @import("toolbar_menu.zig");
 
 pub const Item = sidebar_model.Item;
 pub const LayoutTree = pane_sizes.Tree;
@@ -63,6 +69,9 @@ pub const Config = struct {
     hooks: Hooks = .{},
     /// Live refresh: `.off` (default), `.manual` (tests fire changes), `.system` (main.zig).
     watch: watch.Mode = .off,
+    /// The command palette's file index: null (default, tests) builds none; main.zig passes the
+    /// roots and a thread, tests their temp folders and a runner of their own.
+    index: ?palette_index.Config = null,
 };
 
 /// Files to move or copy into a folder (a drop from Finder or another pane).
@@ -127,6 +136,10 @@ pub const Action = union(enum) {
     cancel_rename,
     /// Files dropped on a folder (the paths and the folder are owned by the queue).
     drop_files: DropJob,
+    /// The toolbar's filter field of this pane changed: its tabs are listed again by name.
+    apply_filter: u32,
+    /// The palette chose a folder or a file (the path is owned by the queue).
+    palette_open: palette_model.Open,
 };
 
 /// A copy of `a` that owns its strings (what `Model.queue` keeps), and the matching free.
@@ -135,6 +148,7 @@ fn dupeOwned(gpa: Allocator, a: Action) Allocator.Error!Action {
     switch (act) {
         .open, .open_in_new_tab, .open_file => |*p| p.* = try gpa.dupe(u8, p.*),
         .toggle_expand => |*e| e.path = try gpa.dupe(u8, e.path),
+        .palette_open => |*o| o.path = try gpa.dupe(u8, o.path),
         .drop_files => |*d| {
             const dest = try gpa.dupe(u8, d.dest);
             errdefer gpa.free(dest);
@@ -159,6 +173,7 @@ fn freeOwned(gpa: Allocator, a: Action) void {
     switch (a) {
         .open, .open_in_new_tab, .open_file => |p| gpa.free(p),
         .toggle_expand => |e| gpa.free(e.path),
+        .palette_open => |o| gpa.free(o.path),
         .drop_files => |d| {
             for (d.paths) |p| gpa.free(p);
             gpa.free(d.paths);
@@ -183,6 +198,12 @@ pub const ViewState = struct {
     file_drag: ?u32 = null,
     /// The layout button's rectangle (window points), where its popover hangs.
     layout_anchor: ?pane_sizes.Rect = null,
+    /// The toolbar's Sort and "..." menus (one open at a time, in one pane).
+    toolbar_menu: toolbar_menu.State = .{},
+    /// Cmd+F: the pane whose filter field takes the keyboard in the next frame.
+    focus_filter: ?u32 = null,
+    /// The command palette (Cmd+K).
+    palette: palette_model.State = .{},
 };
 
 pub const Model = struct {
@@ -225,6 +246,8 @@ pub const Model = struct {
     goto: goto.State = .{},
     /// How a watcher callback wakes a frame; copied from the context each pass.
     waker: ?watch.Waker = null,
+    /// The frame clock (seconds), copied from the context each pass: the palette's index ages by it.
+    clock: f64 = 0,
 
     pub fn init(gpa: Allocator, cfg: Config) Allocator.Error!Model {
         const home = try normalize(gpa, cfg.home_path);
@@ -242,6 +265,8 @@ pub const Model = struct {
         errdefer m.sizes.deinit(gpa);
         try m.sizes.reset(gpa, &m.layout);
         try m.panes.append(gpa, pane);
+        errdefer m.panes.deinit(gpa);
+        try m.view_state.palette.index.configure(gpa, cfg.index);
         return m;
     }
 
@@ -254,6 +279,7 @@ pub const Model = struct {
         if (self.notice) |n| self.gpa.free(n);
         if (self.rename) |*r| r.deinit(self.gpa);
         self.goto.deinit();
+        self.view_state.palette.deinit(self.gpa);
         self.watch.deinit();
         self.clip.deinit();
         self.ops.deinit();
@@ -312,9 +338,12 @@ pub const Model = struct {
     /// Runs the queued actions in order; true if there were any.
     pub fn applyPending(self: *Model) Allocator.Error!bool {
         self.freeRetired();
+        self.view_state.palette.freeRetired();
         try nav_ops.syncColumns(self); // the shown tabs of column-view panes match their folders
         var changed = try self.watch.refreshDirty(self); // folders that changed on disk
         defer self.watch.reconcile(self) catch {}; // watch what is drawn after this pass
+        defer filter_ops.syncNavigation(self) catch {}; // a folder left behind takes its filter along
+        defer palette_ops.sync(self); // the palette's file index follows the sidebar's folders
         if (self.pending.items.len == 0) return changed;
         defer self.clearPending();
         // Actions don't queue more, but copy so the loop is safe if one ever does.
@@ -352,6 +381,8 @@ pub const Model = struct {
             .commit_rename => try rename.commit(self),
             .cancel_rename => rename.cancel(self),
             .drop_files => |d| try file_actions.drop(self, d),
+            .apply_filter => |id| try filter_ops.apply(self, id),
+            .palette_open => |o| try palette_exec.open(self, o),
         };
         rename.validate(self);
         changed = true;

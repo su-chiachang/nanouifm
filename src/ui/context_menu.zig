@@ -29,14 +29,14 @@ pub const State = struct {
 };
 
 /// One menu line: a command (with its own wording if `label` is set), or a separator.
-const Line = struct {
+pub const Line = struct {
     id: ?Id = null,
     label: ?[]const u8 = null,
     danger: bool = false,
     icon: ?[]const u8 = null,
 };
 
-const sep: Line = .{};
+pub const sep: Line = .{};
 
 pub const item_lines = [_]Line{
     .{ .id = .file_open },
@@ -87,12 +87,13 @@ pub fn emptySpaceClicked(c: *ui.Context, m: *Model, pane_id: u32, asked: bool) v
     openAt(c, m, pane_id, false);
 }
 
-/// The menu, drawn over everything while it is open (called once, last, by the panes view).
-pub fn view(c: *ui.Context, m: *Model) void {
-    const st = &m.view_state.ctx_menu;
-    const lines: []const Line = if (st.on_item) &item_lines else &space_lines;
-    const items = c.alloc().alloc(kit.MenuItem, lines.len) catch return;
-    const ids = c.alloc().alloc(?Id, lines.len) catch return;
+/// The menu entries of `lines` (frame memory), and the command each one runs: titles, shortcut
+/// labels, enabled and checked states all come from the registry.
+pub const Built = struct { items: []kit.MenuItem, ids: []?Id };
+
+pub fn build(c: *ui.Context, m: *Model, lines: []const Line) ?Built {
+    const items = c.alloc().alloc(kit.MenuItem, lines.len) catch return null;
+    const ids = c.alloc().alloc(?Id, lines.len) catch return null;
     var tbuf: [96]u8 = undefined;
     for (lines, items, ids[0..]) |ln, *it, *id| {
         id.* = ln.id;
@@ -113,6 +114,16 @@ pub fn view(c: *ui.Context, m: *Model) void {
         // "Open With Default App" shows no shortcut of its own.
         if (ln.label != null) it.shortcut = "";
     }
+    return .{ .items = items, .ids = ids };
+}
+
+/// The menu, drawn over everything while it is open (called once, last, by the panes view).
+pub fn view(c: *ui.Context, m: *Model) void {
+    const st = &m.view_state.ctx_menu;
+    const lines: []const Line = if (st.on_item) &item_lines else &space_lines;
+    const built = build(c, m, lines) orelse return;
+    const items = built.items;
+    const ids = built.ids;
     const anchor: ui.Rect = .{ .x = st.x, .y = st.y - 6, .w = 0, .h = 0 };
     const p = kit.popover(c, "ctx-menu", &st.open, anchor, .{ .placement = .bottom_start, .width = menu_width, .padding = 5 }) orelse return;
     defer p.end();
@@ -130,7 +141,7 @@ const row_h: f32 = 26;
 
 /// The menu's rows (`kit.menu`'s look at a tighter pitch), in a box that scrolls when the window
 /// is too short for all of them. The index of the row chosen.
-fn rows(c: *ui.Context, items: []const kit.MenuItem) ?usize {
+pub fn rows(c: *ui.Context, items: []const kit.MenuItem) ?usize {
     const t = kit.tokens(c);
     var chosen: ?usize = null;
     const checks = for (items) |it| {

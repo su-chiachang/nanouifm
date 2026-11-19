@@ -212,7 +212,7 @@ test "a sidebar entry navigates the pane; Home comes back" {
     try testing.expectEqualStrings(fx.root, m.focusedTab().path());
 }
 
-test "show hidden toggles with the shortcut and the toolbar button" {
+test "show hidden toggles with the shortcut and the more menu" {
     var fx = try Fixture.init();
     defer fx.deinit();
     try populate(&fx);
@@ -228,8 +228,10 @@ test "show hidden toggles with the shortcut and the toolbar button" {
     try testing.expect(t.shortcut(.{ .key = '.', .cmd = true, .shift = true }));
     t.settle(0.2);
     try testing.expect(m.show_hidden and t.hasText(".hidden-note") and t.hasText("7 items"));
-    try ts.clickIcon(&t, "eye");
-    t.settle(0.2);
+    try ts.clickIcon(&t, "ellipsis"); // the "..." menu has it now
+    t.settle(0.4);
+    try t.clickText("Show Hidden Files");
+    t.settle(0.4);
     try testing.expect(!m.show_hidden and !t.hasText(".hidden-note"));
 }
 

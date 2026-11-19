@@ -86,7 +86,7 @@ fn rows(c: *ui.Context, m: *Model, pane: *const Pane, col: *cm.Column, depth: us
     const th = c.theme;
     if (col.listing.err) |e| return message(c, listing.errorText(e));
     const items = col.items();
-    if (items.len == 0) return message(c, "Empty Folder");
+    if (items.len == 0) return message(c, if (pane.filter.isActive() and depth == pane.tabs.items[pane.active].col.filter_col) "No Matches" else "Empty Folder");
     const list_id = c.peekId(null);
     var scroll_to: ?f32 = null;
     if (col.reveal) |row| {

@@ -16,6 +16,9 @@ pub const max_depth: u16 = 24;
 pub const Options = struct {
     show_hidden: bool = false,
     sort: lister.SortOrder = .{},
+    /// The toolbar's name filter. Only the column view reads it (the list filters its top
+    /// level in `Tab`, and never the folders opened in place).
+    filter: []const u8 = "",
 };
 
 const Kids = std.StringHashMapUnmanaged(Listing);
@@ -170,7 +173,7 @@ const Walk = struct {
             w.gpa.free(key);
             l.deinit(w.gpa);
         }
-        try l.rebuild(w.gpa, w.o.show_hidden, w.o.sort);
+        try l.rebuild(w.gpa, w.o.show_hidden, w.o.sort, "");
         try w.self.kids.put(w.gpa, key, l);
         return w.self.kids.getPtr(path).?;
     }

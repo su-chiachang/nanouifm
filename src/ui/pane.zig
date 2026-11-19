@@ -8,6 +8,7 @@ const lister = @import("../core/lister.zig");
 const tab_mod = @import("tab.zig");
 const Tab = tab_mod.Tab;
 const Opts = tab_mod.Opts;
+const Filter = @import("filter.zig").Filter;
 
 pub const ViewMode = enum { list, column };
 
@@ -19,6 +20,8 @@ pub const Pane = struct {
     active: usize = 0,
     sort: lister.SortOrder = .{},
     view_mode: ViewMode = .list,
+    /// The toolbar's name filter: its field's text, and where it was applied (see `filter.zig`).
+    filter: Filter = .{},
 
     /// A pane with one tab in `folder`; `ids` are the pane's and its tab's.
     pub fn init(gpa: Allocator, folder: []const u8, o: Opts, ids: struct { pane: u32 = 0, tab: u32 = 0 }) Allocator.Error!Pane {
@@ -34,6 +37,7 @@ pub const Pane = struct {
     pub fn deinit(self: *Pane) void {
         for (self.tabs.items) |*t| t.deinit();
         self.tabs.deinit(self.gpa);
+        self.filter.deinit(self.gpa);
         self.* = undefined;
     }
 
@@ -43,7 +47,7 @@ pub const Pane = struct {
 
     /// What the tabs' listings are built with.
     pub fn opts(self: *const Pane, show_hidden: bool) Opts {
-        return .{ .show_hidden = show_hidden, .sort = self.sort };
+        return .{ .show_hidden = show_hidden, .sort = self.sort, .filter = self.filter.text() };
     }
 
     pub fn indexOfTab(self: *const Pane, tab_id: u32) ?usize {
@@ -115,6 +119,23 @@ pub const Pane = struct {
             self.sort.key = key;
             self.sort.ascending = true;
         }
+        try self.refilter(show_hidden);
+    }
+
+    /// The sort menu's Ascending and Descending.
+    pub fn setAscending(self: *Pane, ascending: bool, show_hidden: bool) Allocator.Error!void {
+        self.sort.ascending = ascending;
+        try self.refilter(show_hidden);
+    }
+
+    /// The sort menu's Folders First.
+    pub fn toggleFoldersFirst(self: *Pane, show_hidden: bool) Allocator.Error!void {
+        self.sort.folders_first = !self.sort.folders_first;
+        try self.refilter(show_hidden);
+    }
+
+    /// Every tab's rows again (the order, the hidden files or the name filter changed).
+    pub fn refilter(self: *Pane, show_hidden: bool) Allocator.Error!void {
         for (self.tabs.items) |*t| try t.refilter(self.opts(show_hidden));
     }
 };

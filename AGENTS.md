@@ -53,7 +53,15 @@ src/ui/         model.zig (app state, Config, queued Actions), pane.zig, tab.zig
                 rename.zig + rename_view.zig (inline rename); hooks.zig (injected clipboard mirror / Reveal /
                 Option, null in tests) + system_hooks.zig (main.zig only); context_menu.zig, row_input.zig,
                 goto.zig (Go to Folder); watch.zig (live refresh, `Config.watch`); drops.zig (Finder drops
-                and pane-to-pane drag); tests.zig, tests_*.zig + test_support.zig (`ts.Env`)
+                and pane-to-pane drag); toolbar row: toolbar.zig (buttons, name filter field),
+                toolbar_menu.zig (Sort and "..." popovers, drawn with context_menu.rows), filter.zig +
+                filter_ops.zig (per-pane name filter: `Pane.filter`, `Listing.rebuild`'s `filter`);
+                command palette (Cmd+K): palette_model.zig (state in `view_state.palette`, rows live in a
+                retired-not-freed arena), palette_rows.zig (sections, fuzzy ranking), palette_ops.zig
+                (open, requery, choose), palette_exec.zig (open folder/file here, new tab, split),
+                palette_index.zig (file index over `Config.index` roots + sidebar folders, crawled by an
+                injectable `Runner`: a thread in main.zig, a held or immediate one in tests),
+                palette_view.zig; tests.zig, tests_*.zig + test_support.zig (`ts.Env`, `ts.IndexMode`)
 src/core/       the UI-free core library (`zig build test-core`)
 ```
 

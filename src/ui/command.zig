@@ -1,5 +1,5 @@
-//! One command: what the keyboard, the context menu, and (next) the menu bar and the command
-//! palette all run. The table of them is `commands.zig`.
+//! One command: what the keyboard, the context menu, the toolbar's menus, the command palette and
+//! (next) the menu bar all run. The table of them is `commands.zig`.
 const std = @import("std");
 const nanoui = @import("nanoui");
 const ui = nanoui.ui;

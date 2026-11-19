@@ -9,6 +9,7 @@ const Model = @import("model.zig").Model;
 const pane_sizes = @import("pane_sizes.zig");
 const pane_view = @import("pane_view.zig");
 const layout_menu = @import("layout_menu.zig");
+const toolbar_menu = @import("toolbar_menu.zig");
 const style = @import("style.zig");
 
 /// How far past each side of the hairline a press still grabs it.
@@ -30,6 +31,7 @@ pub fn view(c: *ui.Context, m: *Model) void {
     }
     for (fr.dividers) |d| divider(c, m, d, area);
     layout_menu.popover(c, m);
+    toolbar_menu.popover(c, m);
 }
 
 fn divider(c: *ui.Context, m: *Model, d: pane_sizes.Divider, area: pane_sizes.Rect) void {

@@ -15,6 +15,8 @@ const ColumnState = @import("column_model.zig").ColumnState;
 pub const Opts = struct {
     show_hidden: bool = false,
     sort: lister.SortOrder = .{},
+    /// The pane's name filter (borrowed from its toolbar field; "" shows everything).
+    filter: []const u8 = "",
 };
 
 pub const Tab = struct {
@@ -85,7 +87,7 @@ pub const Tab = struct {
     fn load(self: *Tab, opts: Opts) Allocator.Error!void {
         var fresh = try Listing.read(self.gpa, self.path());
         errdefer fresh.deinit(self.gpa);
-        try fresh.rebuild(self.gpa, opts.show_hidden, opts.sort);
+        try fresh.rebuild(self.gpa, opts.show_hidden, opts.sort, opts.filter);
         self.swapIn(fresh);
         try self.rebuildRows(opts, true);
     }
@@ -121,7 +123,7 @@ pub const Tab = struct {
         const items = try Listing.loadFolder(self.gpa, folder);
         var fresh = Listing.fromItems(items);
         errdefer fresh.deinit(self.gpa);
-        try fresh.rebuild(self.gpa, opts.show_hidden, opts.sort);
+        try fresh.rebuild(self.gpa, opts.show_hidden, opts.sort, opts.filter);
         try self.history.push(folder);
         self.swapIn(fresh);
         self.selection.clear(self.gpa);
@@ -155,15 +157,15 @@ pub const Tab = struct {
     /// Reads the folder again, keeping what is still selected.
     pub fn reload(self: *Tab, opts: Opts) Allocator.Error!void {
         try self.load(opts);
-        try self.col.reread(self.gpa, .{ .show_hidden = opts.show_hidden, .sort = opts.sort });
+        try self.col.reread(self.gpa, .{ .show_hidden = opts.show_hidden, .sort = opts.sort, .filter = opts.filter });
         try self.selection.prune(self.gpa, self.exp.items);
     }
 
     /// Hidden files shown or not: no re-read.
     pub fn refilter(self: *Tab, opts: Opts) Allocator.Error!void {
-        try self.listing.rebuild(self.gpa, opts.show_hidden, opts.sort);
+        try self.listing.rebuild(self.gpa, opts.show_hidden, opts.sort, opts.filter);
         try self.rebuildRows(opts, false);
-        try self.col.refilter(self.gpa, .{ .show_hidden = opts.show_hidden, .sort = opts.sort });
+        try self.col.refilter(self.gpa, .{ .show_hidden = opts.show_hidden, .sort = opts.sort, .filter = opts.filter });
         try self.selection.prune(self.gpa, self.exp.items);
     }
 };

@@ -16,7 +16,7 @@ const typeahead = @import("typeahead.zig");
 const isSameOrInside = @import("expansion.zig").isSameOrInside;
 
 fn options(o: Opts) cm.Options {
-    return .{ .show_hidden = o.show_hidden, .sort = o.sort };
+    return .{ .show_hidden = o.show_hidden, .sort = o.sort, .filter = o.filter };
 }
 
 /// Makes the stack match the tab's folder: nothing to do when its last column already is the
@@ -36,7 +36,7 @@ fn newColumn(gpa: Allocator, path: []const u8, o: Opts) Allocator.Error!Column {
     errdefer gpa.free(copy);
     var listing = try Listing.read(gpa, path);
     errdefer listing.deinit(gpa);
-    try listing.rebuild(gpa, o.show_hidden, o.sort);
+    try listing.rebuild(gpa, o.show_hidden, o.sort, "");
     return .{ .path = copy, .listing = listing };
 }
 

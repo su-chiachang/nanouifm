@@ -38,6 +38,14 @@ fn run(init: nanoui.Init) !void {
     const pinned = try sidebar_model.itemsOf(gpa, persisted.pinned.items);
     defer gpa.free(pinned);
 
+    // The palette's file index: Home's well-known folders (Favorites and Pinned are added by the
+    // model), crawled on a background thread.
+    var index_roots: [3][]u8 = undefined;
+    for (&index_roots, [_][]const u8{ "Desktop", "Documents", "Downloads" }) |*root, sub| {
+        root.* = try std.fs.path.join(gpa, &.{ home, sub });
+    }
+    defer for (index_roots) |r| gpa.free(r);
+
     var state = try app_view.State.init(gpa, .{
         .start_path = home,
         .home_path = home,
@@ -51,6 +59,7 @@ fn run(init: nanoui.Init) !void {
         // Clipboard mirror, Reveal in Finder, Option state; live refresh with real watchers.
         .hooks = system_hooks.hooks,
         .watch = .system,
+        .index = .{ .roots = &.{ index_roots[0], index_roots[1], index_roots[2] } },
     });
     defer state.deinit();
 

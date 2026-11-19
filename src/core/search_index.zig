@@ -6,12 +6,16 @@
 //! background thread while other threads call `search` / `entryCount`.
 //!
 //! Paths are plain UTF-8 strings (the Swift original used URLs).
+//!
+//! No `std.Io`: the crawl reads folders with libc (`opendir`/`readdir`, like `lister.zig`) and the lock
+//! is a tiny spin lock around a pointer swap, so a program that keeps `std.Io.Threaded` out of its
+//! build (nanoui apps do) can link this.
 
 const std = @import("std");
 const fuzzy = @import("fuzzy.zig");
 
+const c = std.c;
 const Allocator = std.mem.Allocator;
-const Io = std.Io;
 
 pub const default_max_depth: usize = 6;
 pub const default_max_entries: usize = 200_000;
@@ -71,7 +75,7 @@ pub const SearchIndex = struct {
     roots: []const []const u8,
     max_depth: usize,
     max_entries: usize,
-    mutex: Io.Mutex = .init,
+    mutex: std.atomic.Mutex = .unlocked,
     snapshot: ?*Snapshot = null,
 
     pub fn init(gpa: Allocator, roots: []const []const u8, max_depth: usize, max_entries: usize) Allocator.Error!SearchIndex {
@@ -96,16 +100,12 @@ pub const SearchIndex = struct {
         self.* = undefined;
     }
 
-    fn io() Io {
-        return Io.Threaded.global_single_threaded.io();
-    }
-
     fn lock(self: *SearchIndex) void {
-        self.mutex.lockUncancelable(io());
+        while (!self.mutex.tryLock()) std.Thread.yield() catch {};
     }
 
     fn unlock(self: *SearchIndex) void {
-        self.mutex.unlock(io());
+        self.mutex.unlock();
     }
 
     /// Crawl the roots and replace the index. Blocking: call it from a background thread.
@@ -179,7 +179,6 @@ pub const SearchIndex = struct {
 const Builder = struct {
     gpa: Allocator,
     arena: Allocator,
-    io: Io,
     entries: std.ArrayList(Entry) = .empty,
     seen: std.StringHashMapUnmanaged(void) = .empty,
     max_depth: usize,
@@ -191,30 +190,29 @@ const Builder = struct {
 
     fn walk(self: *Builder, dir_path: []const u8, depth: usize) Allocator.Error!void {
         if (self.full()) return;
-        var dir = Io.Dir.cwd().openDir(self.io, dir_path, .{ .iterate = true }) catch return;
+        var zbuf: [std.fs.max_path_bytes]u8 = undefined;
+        const dz = toZ(&zbuf, dir_path) orelse return;
+        const dir = c.opendir(dz) orelse return;
         var subdirs: std.ArrayList([]const u8) = .empty;
         defer subdirs.deinit(self.gpa);
         {
-            defer dir.close(self.io);
-            var it = dir.iterate();
-            while (true) {
-                const ent = (it.next(self.io) catch break) orelse break;
+            defer _ = c.closedir(dir);
+            while (c.readdir(dir)) |ent| {
                 if (self.full()) break;
-                const name = ent.name;
+                const name = std.mem.sliceTo(@as([*:0]const u8, @ptrCast(&ent.name)), 0);
                 if (name.len == 0 or name[0] == '.' or isExcluded(name)) continue;
 
-                var is_dir = ent.kind == .directory;
-                var is_link = ent.kind == .sym_link;
-                if (ent.kind == .sym_link or ent.kind == .unknown) {
+                const path = try join(self.arena, dir_path, name);
+                var is_dir = ent.type == c.DT.DIR;
+                var is_link = ent.type == c.DT.LNK;
+                if (ent.type == c.DT.LNK or ent.type == c.DT.UNKNOWN) {
                     // Resolve through the link for the directory flag; never descend into links.
-                    const st = dir.statFile(self.io, name, .{}) catch null;
-                    if (st) |s| is_dir = s.kind == .directory;
-                    if (ent.kind == .unknown) is_link = false;
+                    is_dir = isDirectory(path);
+                    if (ent.type == c.DT.UNKNOWN) is_link = false;
                 }
                 const is_pkg = is_dir and isPackageName(name);
                 if (is_pkg) is_dir = false;
 
-                const path = try join(self.arena, dir_path, name);
                 const gop = try self.seen.getOrPut(self.gpa, path);
                 if (gop.found_existing) continue;
                 try self.entries.append(self.gpa, .{
@@ -230,6 +228,22 @@ const Builder = struct {
     }
 };
 
+fn toZ(buf: []u8, path: []const u8) ?[:0]const u8 {
+    if (path.len >= buf.len) return null;
+    @memcpy(buf[0..path.len], path);
+    buf[path.len] = 0;
+    return buf[0..path.len :0];
+}
+
+/// Whether `path` is a folder, following a symlink.
+fn isDirectory(path: []const u8) bool {
+    var zbuf: [std.fs.max_path_bytes]u8 = undefined;
+    const pz = toZ(&zbuf, path) orelse return false;
+    var st: c.Stat = undefined;
+    if (c.stat(pz, &st) != 0) return false;
+    return (@as(u32, st.mode) & c.S.IFMT) == c.S.IFDIR;
+}
+
 fn crawl(gpa: Allocator, roots: []const []const u8, max_depth: usize, max_entries: usize) Allocator.Error!*Snapshot {
     const snap = try gpa.create(Snapshot);
     errdefer gpa.destroy(snap);
@@ -239,7 +253,6 @@ fn crawl(gpa: Allocator, roots: []const []const u8, max_depth: usize, max_entrie
     var b: Builder = .{
         .gpa = gpa,
         .arena = snap.arena.allocator(),
-        .io = Io.Threaded.global_single_threaded.io(),
         .max_depth = max_depth,
         .max_entries = max_entries,
     };

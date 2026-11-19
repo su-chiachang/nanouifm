@@ -72,6 +72,9 @@ pub const ColumnState = struct {
     reveal: bool = true,
     /// Each depth's width; depths past the end have the default.
     widths: std.ArrayList(f32) = .empty,
+    /// The one column the toolbar's name filter applies to: the active one when the filter began
+    /// (Swift's `filterIndex`); null while there is no filter.
+    filter_col: ?usize = null,
 
     pub fn deinit(self: *ColumnState, gpa: Allocator) void {
         self.freeRetired(gpa);
@@ -91,10 +94,20 @@ pub const ColumnState = struct {
         self.retired_listings.clearRetainingCapacity();
     }
 
-    /// Hidden files or the order changed: every column's rows again, no disk read.
+    /// The filter text column `i` is listed with: `o.filter` for the filtered column only.
+    fn filterOf(self: *ColumnState, o: Options, i: usize) []const u8 {
+        if (o.filter.len == 0) {
+            self.filter_col = null;
+            return "";
+        }
+        if (self.filter_col == null) self.filter_col = self.active;
+        return if (self.filter_col.? == i) o.filter else "";
+    }
+
+    /// Hidden files, the order or the filter changed: every column's rows again, no disk read.
     pub fn refilter(self: *ColumnState, gpa: Allocator, o: Options) Allocator.Error!void {
-        for (self.columns.items) |*c| {
-            try c.listing.rebuild(gpa, o.show_hidden, o.sort);
+        for (self.columns.items, 0..) |*c, i| {
+            try c.listing.rebuild(gpa, o.show_hidden, o.sort, self.filterOf(o, i));
             try c.selection.prune(gpa, c.listing.visible);
         }
         self.validate(gpa);
@@ -103,10 +116,10 @@ pub const ColumnState = struct {
     /// Every column read from disk again, keeping what is still selected; a column whose folder
     /// is no longer the selected one of the column before it goes.
     pub fn reread(self: *ColumnState, gpa: Allocator, o: Options) Allocator.Error!void {
-        for (self.columns.items) |*c| {
+        for (self.columns.items, 0..) |*c, i| {
             var fresh = try Listing.read(gpa, c.path);
             errdefer fresh.deinit(gpa);
-            try fresh.rebuild(gpa, o.show_hidden, o.sort);
+            try fresh.rebuild(gpa, o.show_hidden, o.sort, self.filterOf(o, i));
             try self.retired_listings.append(gpa, c.listing);
             c.listing = fresh;
             try c.selection.prune(gpa, c.listing.visible);

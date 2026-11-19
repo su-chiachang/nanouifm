@@ -48,11 +48,14 @@ pub const Listing = struct {
         self.* = .{};
     }
 
-    /// Recomputes `visible` for the hidden-files setting and the order.
-    pub fn rebuild(self: *Listing, gpa: Allocator, show_hidden: bool, order: lister.SortOrder) Allocator.Error!void {
+    /// Recomputes `visible` for the hidden-files setting, the toolbar's name filter ("" shows
+    /// everything) and the order.
+    pub fn rebuild(self: *Listing, gpa: Allocator, show_hidden: bool, order: lister.SortOrder, filter: []const u8) Allocator.Error!void {
         var out: std.ArrayList(FileItem) = .empty;
         errdefer out.deinit(gpa);
-        for (self.all) |it| if (show_hidden or !it.is_hidden) try out.append(gpa, it);
+        for (self.all) |it| {
+            if ((show_hidden or !it.is_hidden) and nameMatches(it.name, filter)) try out.append(gpa, it);
+        }
         const fresh = try out.toOwnedSlice(gpa);
         lister.sort(fresh, order);
         gpa.free(self.visible);
@@ -65,6 +68,18 @@ pub const Listing = struct {
         return null;
     }
 };
+
+/// Whether `name` contains `filter` ignoring case (an empty filter matches everything), as
+/// Swift's `localizedCaseInsensitiveContains` does for the toolbar's field.
+pub fn nameMatches(name: []const u8, filter: []const u8) bool {
+    if (filter.len == 0) return true;
+    if (filter.len > name.len) return false;
+    var i: usize = 0;
+    while (i + filter.len <= name.len) : (i += 1) {
+        if (std.ascii.startsWithIgnoreCase(name[i..], filter)) return true;
+    }
+    return false;
+}
 
 /// What a lister error says, for the banner.
 pub fn errorText(e: lister.ListError) []const u8 {

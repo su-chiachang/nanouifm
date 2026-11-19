@@ -15,6 +15,7 @@ pub fn view(c: *ui.Context, m: *Model) void {
         if (!sameKey(key, s.native())) continue;
         if (cmd.file_scope and c.focus_is_text) continue;
         if (!commands.isEnabled(m, cmd)) continue;
+        if (m.view_state.palette.open and cmd.id != .palette_show) return; // the palette is modal
         if (c.shortcut(s)) {
             m.queue(.{ .run_command = cmd.id }) catch {};
             c.changed = true;

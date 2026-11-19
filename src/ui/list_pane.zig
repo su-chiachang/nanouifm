@@ -88,7 +88,7 @@ fn rows(c: *ui.Context, m: *Model, pane: *const Pane, tab: *Tab, cols: style.Col
     if (items.len == 0) {
         const msg = ui.div(c).sizeFull().center();
         defer msg.end();
-        ui.text(c, "This folder is empty", .{ .size = 13, .color = th.muted });
+        ui.text(c, if (pane.filter.isActive()) "No Matches" else "This folder is empty", .{ .size = 13, .color = th.muted });
         return;
     }
     const pad: f32 = 2;

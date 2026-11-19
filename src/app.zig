@@ -15,6 +15,7 @@ const rename_view = @import("ui/rename_view.zig");
 const goto = @import("ui/goto.zig");
 const context_menu = @import("ui/context_menu.zig");
 const drops = @import("ui/drops.zig");
+const palette_view = @import("ui/palette_view.zig");
 
 pub const State = model.Model;
 pub const Config = model.Config;
@@ -24,6 +25,8 @@ pub fn view(m: *State, c: *ui.Context) void {
     // Last pass's clicks and keys change the folder, the order or the hidden files first, so
     // nothing the previous pass handed to the frame is freed while this one builds.
     m.watch.setWaker(c.waker);
+    m.view_state.palette.index.setWaker(c.waker);
+    m.clock = c.time;
     _ = m.applyPending() catch false;
     c.title_bar_height = style.tab_strip_height;
     shortcuts(c, m);
@@ -34,6 +37,7 @@ pub fn view(m: *State, c: *ui.Context) void {
     context_menu.view(c, m); // over everything
     goto.view(c, m);
     drops.ghost(c, m);
+    palette_view.view(c, m); // over everything
 }
 
 /// Every command's shortcut (`ui/commands.zig` has the table: Cmd+[ / ] history, Cmd+Up, Cmd+T /

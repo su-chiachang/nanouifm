@@ -335,12 +335,16 @@ test "the mode toggle keeps each tab's folder, and is per pane" {
     t.settle(0.3);
     try expectCols(&m, &fx, &.{ "alpha", "alpha/beta", "alpha/beta/gamma" });
 
-    // The toolbar's buttons do the same.
-    try ts.clickIcon(&t, "list.bullet");
-    t.settle(0.3);
+    // The toolbar's "..." menu does the same.
+    try ts.clickIcon(&t, "ellipsis");
+    t.settle(0.4);
+    try t.clickText("as List");
+    t.settle(0.4);
     try testing.expectEqual(.list, m.focusedPane().view_mode);
-    try ts.clickIcon(&t, "rectangle.split.3x1");
-    t.settle(0.3);
+    try ts.clickIcon(&t, "ellipsis");
+    t.settle(0.4);
+    try t.clickText("as Columns");
+    t.settle(0.4);
     try testing.expectEqual(.column, m.focusedPane().view_mode);
 
     // A split: the new pane starts in the same mode, then has its own.

@@ -21,7 +21,7 @@ const nav_keys = [_]struct { key: u21, nav: NavKey }{
 };
 
 pub fn view(c: *ui.Context, m: *Model) void {
-    if (c.focus_is_text) return; // typing goes to the field
+    if (c.focus_is_text or m.view_state.palette.open) return; // typing goes to the field; the palette is modal
     for (nav_keys) |n| {
         if (c.shortcut(.{ .key = n.key })) m.queue(.{ .nav = .{ .key = n.nav, .shift = false } }) catch {};
         if (c.shortcut(.{ .key = n.key, .shift = true })) m.queue(.{ .nav = .{ .key = n.nav, .shift = true } }) catch {};

@@ -8,6 +8,6 @@
             .hash = "nanoui-0.14.6-we0KMYrDQwD3BB0rVUDlHfF-f8b0KuLbhPI6o6yjitIS",
         },
     },
-    .paths = .{ "build.zig", "build.zig.zon", "src", "scripts", "Resources", "README.md", "AGENTS.md" },
+    .paths = .{ "build.zig", "build.zig.zon", "src", "scripts", "Resources", "docs", "README.md", "AGENTS.md" },
     .fingerprint = 0xbfb84c9dba919864,
 }

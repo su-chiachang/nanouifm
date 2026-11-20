@@ -95,3 +95,7 @@ button while its panel is key.
 - **Return renames** (as in the Swift app); open with Cmd+O or Cmd+Down. Cmd+Backspace is handled by the view, not the
   menu, so a Delete-key mismatch in AppKit cannot disable Move to Trash.
 - Name sorting does not ignore diacritics.
+
+## License
+
+[MIT](LICENSE). nanoui, the toolkit this builds on, is MIT-licensed too.
